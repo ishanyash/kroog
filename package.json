@@ -1,0 +1,21 @@
+{
+  "name": "kroog",
+  "version": "0.7.0",
+  "description": "Kroog: a local board for the Claude Code chats in your editor. Watch them, approve their requests and send them messages from a browser tab.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "kroog": "bin/kroog.js"
+  },
+  "scripts": {
+    "start": "node bin/kroog.js start",
+    "demo": "node bin/kroog.js demo",
+    "link": "node bin/kroog.js link",
+    "unlink": "node bin/kroog.js unlink",
+    "status": "node bin/kroog.js status",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

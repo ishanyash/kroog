@@ -1,0 +1,23 @@
+/* Brain page (second brain search). Uses the tokens from styles.css. */
+.brain-page .brain-sub { max-width: 72ch; margin: -6px 0 6px; font-size: var(--small); }
+.brain-page #brain-progress { min-height: 1.2em; margin: 0 0 4px; font-size: var(--tiny); color: var(--accent-ink); }
+.brain-page .brain-error { min-height: 0; margin: 0 0 8px; font-size: var(--small); color: var(--amber); }
+.brain-page .brain-error:empty { display: none; }
+.brain-page .brain-search { flex: 1 1 420px; max-width: 640px; }
+.brain-page .brain-search input { width: 100%; }
+.brain-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; margin-top: 8px; }
+@media (max-width: 860px) { .brain-grid { grid-template-columns: minmax(0, 1fr); } }
+.brain-hits { list-style: none; margin: 0 0 20px; padding: 0; }
+.brain-hit { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.brain-hit:last-child { border-bottom: 0; }
+.brain-hit .bh-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.brain-hit .bh-head b { font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.brain-hit .bh-proj { flex: none; font-size: var(--tiny); color: var(--ink-3); }
+.brain-hit .bh-path { margin-top: 2px; font-size: var(--tiny); color: var(--ink-3); overflow-wrap: anywhere; }
+.brain-hit .bh-snip { margin: 6px 0; font-size: var(--small); line-height: 1.55; color: var(--ink-2); overflow-wrap: anywhere; }
+.brain-hit mark { background: var(--accent-soft); color: var(--accent-ink); padding: 0 1px; border-radius: 2px; }
+.brain-hit .bh-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: var(--tiny); }
+.brain-hit .bh-foot .quiet { overflow-wrap: anywhere; }
+.brain-hit .bh-acts { display: inline-flex; gap: 12px; }
+.brain-connect p { font-size: var(--small); line-height: 1.55; }
+.brain-connect .btn { margin: 4px 0 8px; }

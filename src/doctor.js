@@ -1,0 +1,105 @@
+// `kroog doctor`: checks, in plain words, everything that has to be right for Kroog to see
+// your chats and send messages into them. Each check says ok or what to do.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { paths, loadSettings, claudeDir } from './config.js';
+import { linkStatus, hasOldCrewHooks } from './link.js';
+import { findClaude, claudeVersion } from './claude-cli.js';
+
+// Claude Code gives each chat an inbox from this version on.
+export const INBOX_VERSION = '2.1.224';
+
+export function cmpVersion(a, b) {
+  const pa = String(a || '0').split('.').map(Number);
+  const pb = String(b || '0').split('.').map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  }
+  return 0;
+}
+
+// Claude Code extensions installed in VS Code, Cursor and friends, newest first per editor.
+export function editorExtensions(home = os.homedir()) {
+  const out = [];
+  for (const [editor, dir] of [['VS Code', '.vscode/extensions'], ['Cursor', '.cursor/extensions'], ['VS Code Insiders', '.vscode-insiders/extensions'], ['Windsurf', '.windsurf/extensions']]) {
+    let names = [];
+    try { names = fs.readdirSync(path.join(home, dir)); } catch { continue; }
+    const versions = names.map((n) => /^anthropic\.claude-code-(\d+\.\d+\.\d+)/.exec(n)).filter(Boolean).map((m) => m[1]);
+    versions.sort((a, b) => cmpVersion(b, a));
+    if (versions.length) out.push({ editor, version: versions[0] });
+  }
+  return out;
+}
+
+async function running(port) {
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/state`, { signal: AbortSignal.timeout(1500) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function doctor({ version = '' } = {}) {
+  const p = paths();
+  const settings = loadSettings();
+  const checks = [];
+  const ok = (what, detail = '') => checks.push({ ok: true, what, detail });
+  const bad = (what, fix) => checks.push({ ok: false, what, fix });
+
+  // 1. Linked, and the hook script is current.
+  const link = linkStatus();
+  if (link.error) bad('Claude Code settings could not be read', link.error);
+  else if (link.linked) ok('Linked to Claude Code', link.settingsPath);
+  else bad('Not linked to Claude Code', 'Run: node bin/kroog.js link');
+  if (hasOldCrewHooks()) bad('Some hooks still point at the old ~/.crew folder', 'Run: node bin/kroog.js link');
+  let script = '';
+  try { script = fs.readFileSync(p.hookScript, 'utf8'); } catch { /* missing */ }
+  if (!script) bad('The hook script is missing', 'Run: node bin/kroog.js link');
+  else if (!script.includes('X-Kroog-Inbox')) bad('The hook script is from an older version, so chats can\'t tell Kroog their inbox', 'Start Kroog once (it updates the script), or run: node bin/kroog.js link');
+  else ok('The hook script passes each chat\'s inbox to Kroog');
+  if (link.scriptPort && Number(link.scriptPort) !== Number(settings.port)) bad(`The hooks talk to port ${link.scriptPort}, but Kroog uses ${settings.port}`, `Run: node bin/kroog.js link --port ${settings.port}`);
+
+  // 2. Kroog itself.
+  if (await running(settings.port)) ok(`Kroog is running on port ${settings.port}`);
+  else bad('Kroog is not running', 'Run: node bin/kroog.js start (and keep that window open)');
+
+  // 3. Claude Code versions: the CLI Kroog uses, and the extension in each editor.
+  const cli = findClaude(settings.claudePath || '');
+  const cliVersion = cli ? await claudeVersion(cli.path) : null;
+  if (cliVersion) ok(`Claude Code ${cliVersion} found for running chats`, cli.path);
+  else bad('Claude Code was not found, so Kroog can\'t start chats or use Haiku', 'Install it (code.claude.com) or set its path in Setup');
+  const exts = editorExtensions();
+  if (!exts.length) bad('No Claude Code extension found in VS Code or Cursor', 'Install the Claude Code extension in your editor');
+  for (const e of exts) {
+    if (cmpVersion(e.version, INBOX_VERSION) >= 0) ok(`${e.editor} has Claude Code ${e.version}, which has chat inboxes`);
+    else bad(`${e.editor} has Claude Code ${e.version}, which is too old for messages from Kroog`, `Update the Claude Code extension to ${INBOX_VERSION} or newer`);
+  }
+
+  // 4. Inboxes Kroog knows, and recent hook events.
+  let inboxes = {};
+  try { inboxes = JSON.parse(fs.readFileSync(p.inboxes, 'utf8')); } catch { /* none */ }
+  const known = Object.values(inboxes);
+  const alive = known.filter((v) => { try { return fs.statSync(v.socket).isSocket(); } catch { return false; } });
+  if (alive.length) ok(`Kroog can message ${alive.length} open chat${alive.length === 1 ? '' : 's'} right now`);
+  else bad('Kroog knows no open chat inbox yet', 'In VS Code, send any message in the chat once while Kroog runs. If it still does not show up, type /status in that chat: it needs a "Peer address" line.');
+  let state = {};
+  try { state = JSON.parse(fs.readFileSync(p.state, 'utf8')); } catch { /* none */ }
+  const last = Object.values(state.lastEvents || {}).sort((a, b) => b - a)[0];
+  if (last) ok(`Last event from a chat: ${Math.round((Date.now() - last) / 60000)} min ago`);
+  else bad('No events from any chat yet', 'Use a chat in VS Code while Kroog runs');
+
+  return { version, checks, claudeDir: claudeDir(), home: p.home };
+}
+
+export function printDoctor(r) {
+  console.log(`Kroog ${r.version} check-up\n`);
+  for (const c of r.checks) {
+    console.log(`${c.ok ? '  ok      ' : '  PROBLEM '} ${c.what}`);
+    if (c.ok && c.detail) console.log(`           ${c.detail}`);
+    if (!c.ok && c.fix) console.log(`           Fix: ${c.fix}`);
+  }
+  const problems = r.checks.filter((c) => !c.ok).length;
+  console.log(problems ? `\n${problems} thing${problems === 1 ? '' : 's'} to fix.` : '\nAll good.');
+}
