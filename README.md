@@ -66,33 +66,35 @@ Kroog reads Claude Code's own registry of open chats, so it knows which chats ar
 
 ### A chat's profile
 
-Click a chat to open its profile. Kroog shows, it doesn't chat: talking to the chat happens in your editor.
-- **At the top:** its state, where it is ("open in VS Code", or "not open now"), its project, when it started and how many turns, and a one-line summary with keywords.
-- **asked:** what you asked for, and the latest ask if it changed.
-- **did:** its plan with what's done, the files it changed, how many edits, reads and commands, and its last reply.
-- **agents:** the agents it started, what each was asked and what it came back with. On the week view, agents are the small circles under a chat, and their steps are the hollow squares.
-- **learned:** the notes Kroog kept from it (decisions, findings, how-tos, open questions). If there are none, **write notes** makes them.
-- **came from / led to:** the chats it was built from, and the chats built from it.
-- **read the conversation:** the real conversation, from Claude Code's own history, when you want it.
+Click a chat to open its profile. It is a short read, not a report:
+- **At the top:** its state, where it is ("open in VS Code", or "not open now"), its project, when it started, and a one-line summary with keywords.
+- **done so far:** up to three lines on what has actually been done.
+- **from here:** up to two lines on what is left, open or failing, when there is something.
 - **At the bottom:** **open in VS Code**, and **new chat from this**.
-- **More (⋯):** summarise again, write notes, copy a summary, hide.
+
+With the AI helper on, Haiku writes those lines (and keeps them current as the chat moves); without it, Kroog takes them from the chat's own plan and last reply.
+
+Everything else is under **more**: what was asked, the plan, the files, how many edits, reads and commands, the agents it started and what each came back with, the notes Kroog kept from it, where it came from and what it led to, and the real conversation from Claude Code's own history. The **⋯** menu has summarise again, write notes, copy a summary, and hide.
 
 When a chat asks to edit a file or run a command, the question shows at the top of its profile. Answer it in your editor, or here if Kroog is holding it.
 
 ### Start a new chat from what others worked out
 
-1. Click the small link key on a chat. Add more chats with their keys. (Or press **new chat from this** in a profile.)
-2. Click **+ new chat** in the project it belongs to. Or click an existing chat to send the context into it.
-3. Choose what to carry over (last reply, plan, files, notes), or press **write it with ai** for one merged brief you can edit.
-4. Press **open a new chat in VS Code**. VS Code opens on that project with a new Claude Code chat, and the context is typed in as its first message: "Context from Kroog… what earlier chats on this work established…". Press Enter there to begin. Kroog draws the lines from the old chats to the new one.
+1. Take a suggested group on the **list** page (**new chat from these**), or click the small link key on a chat and add more chats with their keys, or press **new chat from this** in a profile.
+2. The panel lists the chats. Add a goal if you have one, pick the project folder, and press **open a new chat in VS Code**.
+3. Kroog starts the chat in that folder with the context as its first message ("Context from Kroog, the map of my Claude Code chats: what earlier chats on this work established…"). Haiku reads it and replies in a few lines with what it understood; that takes a few seconds. Then VS Code opens on the chat and you carry on there. Kroog draws the lines from the old chats to the new one.
 
-If you'd rather arrive to a chat that has already read the context, pick **Claude reads it first**: Kroog starts the chat with the context and Claude replies with what it understood, then VS Code opens on it.
+If you would rather nothing runs before you say so, pick **I paste it myself**: VS Code opens a new, empty chat on that folder and the context is on your clipboard. Paste it and press Enter.
+
+**choose what to take from each** (folded away in the panel) picks the parts per chat: last reply, what was asked, plan, files, notes. **write it with ai** merges everything into one short brief you can edit.
+
+The first time, your Mac asks twice. VS Code asks "Allow 'Claude Code for VS Code' extension to open this URI?": tick "Do not ask me again" and press Open. If Kroog had to open the project folder through a link, macOS asks whether to open the folder in Code: tick "Allow opening local paths without asking" and press Yes. Kroog avoids the second one when VS Code's own `code` command is installed (in VS Code: "Shell Command: Install 'code' command in PATH"); **Setup** says whether it was found.
 
 **+ new chat** on a project band opens a plain new chat in VS Code on that folder, with an optional first message.
 
 ### Chats about the same work
 
-The **list** page starts with suggested groups: chats that look like the same piece of work, with a name and a reason. With the AI helper on, Haiku (on your plan) proposes and names the groups; without it, Kroog groups by shared words. Press **new chat from these N** and Kroog jumps to the lineage with those chats picked and the draft brief wired to them; the panel is ready to open the new chat in VS Code. **not related** hides a suggestion. Suggestions refresh when chats change, or with **look again**.
+The **list** page starts with suggested groups: chats that look like the same piece of work. Each card has a name, the chats in it, and **new chat from these**, which jumps to the lineage with those chats picked and the panel ready. The × hides a suggestion. With the AI helper on, Haiku (on your plan) proposes and names the groups (the reason is a tooltip on the name); without it, Kroog groups by shared words. Haiku is asked again only when the set of chats changes, or with **look again**; the page never waits for it.
 
 ### Brain
 
@@ -141,6 +143,7 @@ Add `--port 4878` to `link` and `start` to use another port.
 - **Sending context into an open chat** uses that chat's inbox, a private socket Claude Code opens for each chat. In the editor it arrives as a message from another session, so it can never approve anything for you.
 - **Inboxes.** Since Claude Code 2.1.224, every chat has a private inbox, a socket only your user can reach. Kroog sends your messages and briefs there.
 - **Conversations.** The conversation shown in a chat's panel comes from Claude Code's own history file for that chat.
+- **What the page gets.** The browser gets each chat's newest 40 steps and the counts of the rest, not the whole chat, and a working chat's updates a few times a second at most. Kroog saves its state at most every 5 seconds, off the main thread. With a few hundred chats, the earlier way of doing all three was what made it slow.
 - **Claude Code on your Mac.** The AI helper and "Claude reads it first" use Claude Code itself (`claude -p`), with your usual login, settings and permission rules. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
 
 ## Safety

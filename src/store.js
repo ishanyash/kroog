@@ -2,11 +2,32 @@ import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { baseName, shortId, titleFromPrompt, cleanPrompt } from './util.js';
 
-const MAX_STEPS = 300;
+const MAX_STEPS = 200;
+// How long a save can wait, and the least time between two saves. Writing the whole state
+// for every hook event made Kroog slow once there were a few hundred chats in it.
+const SAVE_DEBOUNCE = 1500;
+const SAVE_FLOOR = 5000;
 const KEEP_DAYS = 14;
 
 function countWords(text) {
   return String(text || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+// Steps grouped by what they did: edits, reads, commands, searches, the rest, and the
+// failed ones. `base` is the count of steps that have already dropped off the list.
+export function tallyOf(steps, base = null) {
+  const n = { edit: 0, read: 0, run: 0, search: 0, other: 0, failed: 0, ...(base || {}) };
+  for (const st of steps || []) {
+    if (!st || st.kind !== 'tool' || st.helper) continue;
+    const t = String(st.tool || '');
+    if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t)) n.edit += 1;
+    else if (/^(Read|Glob|LS)$/.test(t)) n.read += 1;
+    else if (/^(Bash|Shell)$/.test(t)) n.run += 1;
+    else if (/^(Grep|WebSearch|WebFetch)$/.test(t)) n.search += 1;
+    else n.other += 1;
+    if (st.state === 'failed') n.failed += 1;
+  }
+  return n;
 }
 
 function emptyData() {
@@ -53,15 +74,35 @@ export class Store extends EventEmitter {
   scheduleSave() {
     if (!this.file) return;
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => this.saveNow(), 400);
+    const wait = Math.max(SAVE_DEBOUNCE, (this.lastSaveAt || 0) + SAVE_FLOOR - Date.now());
+    this.saveTimer = setTimeout(() => this.saveSoon(), wait);
   }
 
+  // Off the main thread's way: one save at a time, the next one queued if something changed.
+  saveSoon() {
+    if (!this.file) return;
+    if (this.saving) { this.saveAgain = true; return; }
+    this.saving = true;
+    this.lastSaveAt = Date.now();
+    const tmp = `${this.file}.tmp`;
+    const json = JSON.stringify(this.data);
+    fs.promises.writeFile(tmp, json, { mode: 0o600 })
+      .then(() => fs.promises.rename(tmp, this.file))
+      .catch(() => { /* a failed save is tried again on the next change */ })
+      .finally(() => {
+        this.saving = false;
+        if (this.saveAgain) { this.saveAgain = false; this.scheduleSave(); }
+      });
+  }
+
+  // The same, but now and blocking (used when Kroog stops).
   saveNow() {
     if (!this.file) return;
     clearTimeout(this.saveTimer);
     const tmp = `${this.file}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(this.data), { mode: 0o600 });
     fs.renameSync(tmp, this.file);
+    this.lastSaveAt = Date.now();
   }
 
   get sessions() {
@@ -124,7 +165,13 @@ export class Store extends EventEmitter {
 
   addStep(s, step) {
     s.steps.push({ id: shortId(8), t: Date.now(), ...step });
-    if (s.steps.length > MAX_STEPS) s.steps.splice(0, s.steps.length - MAX_STEPS);
+    if (step.kind === 'prompt' && !s.firstPrompt) s.firstPrompt = String(step.text || '');
+    if (s.steps.length > MAX_STEPS) {
+      // Older steps drop off, but what they added up to stays.
+      const gone = s.steps.splice(0, s.steps.length - MAX_STEPS);
+      s.tally = tallyOf(gone, s.tally);
+      s.stepsDropped = (s.stepsDropped || 0) + gone.length;
+    }
   }
 
   touch(s) {

@@ -365,6 +365,11 @@ label.check { display: inline-flex; align-items: center; gap: 9px; cursor: point
 .composer .hint { color: var(--ink-3); font-size: var(--small); }
 
 /* Brief builder (handoff) */
+.src-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.src-list li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; min-width: 0; }
+.src-list li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-list li .quiet { font-size: 12px; }
+.src-ticks { display: grid; gap: 8px; margin-top: 8px; }
 .src { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
 .src + .src { margin-top: 8px; }
 .src .head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
@@ -704,15 +709,19 @@ details.menu .menu-items button:hover, details.menu .menu-items button:focus-vis
 @media (prefers-reduced-motion: reduce) { .agents li.on i { animation: none; } }
 
 /* ---- suggested groups on the list page (v0.9) ---- */
-.groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 22px; }
-.group { border: 1px solid var(--line); border-left: 2px solid var(--accent); border-radius: 4px; padding: 12px 14px; background: var(--paper); display: grid; gap: 8px; }
-.group .g-head { display: grid; gap: 2px; }
-.group .g-head b { font-weight: 500; }
-.group .g-head .quiet { font-size: var(--small); }
-.group .g-chats { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
-.group .g-chats li { display: grid; gap: 1px; }
-.group .g-chats .quiet { font-size: 12px; }
-.group .g-acts { display: flex; align-items: center; gap: 12px; margin-top: 4px; white-space: nowrap; }
+.groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-bottom: 26px; }
+.group { border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px 12px; background: var(--paper); display: grid; gap: 8px; align-content: start; }
+.group .g-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: start; }
+.group .g-head b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group .g-head .quiet { grid-column: 1; font-size: var(--small); }
+.group .g-x { grid-column: 2; grid-row: 1 / span 2; width: 24px; height: 24px; font-size: 16px; line-height: 1; color: var(--ink-3); margin: -4px -6px 0 0; }
+.group .g-x:hover { color: var(--ink); }
+.group .g-chats { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+.group .g-chats li { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.group .g-chat { display: block; flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: none; color: var(--ink-2); cursor: pointer; text-align: left; font-size: 13px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group .g-chat:hover { color: var(--accent-ink); }
+.group .g-chats .st { flex: none; font-size: 11px; color: var(--k-ink, var(--k)); }
+.group .g-acts { display: flex; align-items: center; gap: 12px; margin-top: 2px; white-space: nowrap; }
 .section-head .g-by { margin-left: 8px; font-size: 12px; }
 .section-head #groups-again { margin-left: auto; font-size: 12px; }
 .g-empty { margin: 0 0 18px; font-size: var(--small); }
@@ -737,3 +746,24 @@ details.menu .menu-items button:hover, details.menu .menu-items button:focus-vis
 /* Hover is one signal per element. */
 .node:hover { border-color: var(--ink-3); }
 .row:hover { background: var(--paper-2); box-shadow: 0 0 0 8px var(--paper-2); }
+
+/* ---- the profile as a short read (v1.1): done so far, from here, the rest under "more" ---- */
+.read { margin-top: 2px; }
+.read h3 { font-size: var(--small); font-weight: 500; color: var(--ink-3); margin: 14px 0 6px; }
+.read h3:first-child { margin-top: 0; }
+.read .lines { list-style: none; margin: 0; padding: 0; }
+.read .lines li { position: relative; padding-left: 14px; margin: 4px 0; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.read .lines li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 5px; height: 5px; background: var(--ink-3); }
+.read h3 + .lines li::before { background: var(--accent); }
+.read h3:nth-of-type(2) + .lines li::before { background: var(--amber); }
+.read .quiet { font-size: 13px; margin: 0; }
+.working-now + .read { margin-top: 10px; }
+.ask + .read { margin-top: 12px; }
+details.more { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.more > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; display: flex; align-items: center; gap: 8px; min-height: 28px; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3); transform: rotate(-45deg); transition: transform var(--dur-micro) ease; flex: none; margin-left: 2px; }
+details.more[open] > summary::before { transform: rotate(45deg); }
+details.more > summary:hover { color: var(--ink); }
+details.more > summary .quiet { font-size: var(--small); }
+details.more > .readout { border-top: 0; padding-top: 8px; }

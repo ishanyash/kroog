@@ -13,12 +13,13 @@ import fs from 'node:fs';
 import { findClaude, claudeVersion, startTurn } from './claude-cli.js';
 import { truncate, clip, firstLine, titleFromPrompt, baseName } from './util.js';
 import { describeTool, applyPlanTool, fileTouched } from './describe.js';
+import { EditorOpener } from './editor.js';
 
 const MAX_RUNNING = 4;
 const words = (t) => String(t || '').trim().split(/\s+/).filter(Boolean).length;
 
 export class Runner {
-  constructor({ store, engine, getSettings, demo = false, opener = null }) {
+  constructor({ store, engine, getSettings, demo = false, opener = null, editor = null }) {
     this.store = store;
     this.engine = engine;
     this.getSettings = getSettings;
@@ -30,6 +31,8 @@ export class Runner {
       const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
       try { spawn(cmd, [url], { stdio: 'ignore', detached: true }).unref(); } catch { /* best effort */ }
     });
+    // Opens folders and chats in the editor (through its command when it has one).
+    this.editor = editor || new EditorOpener({ open: this.open, demo });
     this.cli = null;
     this.version = null;
     this.lastError = null;
@@ -70,7 +73,7 @@ export class Runner {
 
   // ---- start a turn -----------------------------------------------------------------
 
-  run({ mode = 'new', id = null, from = null, cwd = '', prompt = '', title = '', input = null, label = '', permissionMode, then = '', editor = '' } = {}) {
+  run({ mode = 'new', id = null, from = null, cwd = '', prompt = '', title = '', input = null, label = '', permissionMode, then = '', editor = '', model = '' } = {}) {
     if (!this.available()) return { ok: false, error: 'Kroog could not find Claude Code on this Mac. See setup.' };
     const text = String(prompt || '').trim();
     if (!text) return { ok: false, error: 'Type a message first.' };
@@ -125,20 +128,20 @@ export class Runner {
       const ed = editor || s.editor || this.getSettings().defaultEditor || 'vscode';
       s.editor = ed;
       s.thenEditor = true;
-      if (mode === 'new') this.open(`${ed}://file${s.cwd.endsWith('/') ? s.cwd : `${s.cwd}/`}`);
+      if (mode === 'new') this.editor.openFolder(ed, s.cwd);
       s.now = `Starting it here; it opens in ${ed === 'cursor' ? 'Cursor' : 'VS Code'} next`;
     }
     const pm = permissionMode || s.permissionModeKroog || this.getSettings().kroogPermissionMode || 'default';
     s.permissionModeKroog = pm;
     if (this.demo) this.fakeTurn(s, text);
-    else this.spawnTurn(s, { mode, from, text, pm });
+    else this.spawnTurn(s, { mode, from, text, pm, model });
     return { ok: true, id, delivered: 'kroog', mode };
   }
 
-  spawnTurn(s, { mode, from, text, pm }) {
+  spawnTurn(s, { mode, from, text, pm, model = '' }) {
     let child;
     try {
-      child = startTurn(this.cli.path, { mode, id: s.id, from, cwd: s.cwd, prompt: text, permissionMode: pm });
+      child = startTurn(this.cli.path, { mode, id: s.id, from, cwd: s.cwd, prompt: text, permissionMode: pm, model });
     } catch (error) {
       this.finish(s, { error: `Could not start Claude Code: ${error.message}` });
       return;
@@ -217,7 +220,8 @@ export class Runner {
       if (!error && !stopped) {
         const r = this.toEditor(s.id, { quiet: true });
         if (r.ok) {
-          this.open(r.url);
+          // The folder was opened when the turn started, so the chat link is enough now.
+          this.editor.openChat(s.editor, { sessionId: s.id }).catch(() => {});
           store.addStep(s, { kind: 'info', text: `Opened in ${s.app}. Carry on there, or from here.` });
           store.touch(s);
         }

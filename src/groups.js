@@ -12,12 +12,15 @@ const MAX_CHATS = 80;
 const MAX_GROUP = 8;
 const SIM_THRESHOLD = 0.2;
 const RECENT_DAYS = 14;
+// The AI helper is asked again only when the set of chats changes, and not more often than
+// this while they merely keep working.
+const AI_EVERY = 10 * 60000;
 
 const SYSTEM = `You look at a person's recent Claude Code chats and group the ones that are about the same piece of work or the same topic, so they can be combined into one new chat with shared context.
 Rules: only group chats that clearly belong together (same feature, same bug, same project area, same deliverable). 2 to 8 chats per group. A chat is in at most one group. Chats from different project folders can share a group only if they are clearly the same topic. Leave out chats that stand alone.
 Reply with only JSON: [{"name": "...", "why": "...", "chats": [numbers]}]
-- name: at most 6 words, lowercase, like a folder name
-- why: one short sentence on what they share, at most 20 words
+- name: 2 to 4 plain words, lowercase, no punctuation, like a folder name ("terraform rollout", "slack cost agent")
+- why: at most 12 words on what they share, no full stop
 - chats: the numbers of the chats in the group`;
 
 const STOP = new Set('the a an and or of to in on for with from by at as is are was were be been it its this that these those we you i they he she our your their not no yes do does did done can could should would will just also then than so if into over under about after before more most less very all any some each other same new old up out off'.split(' '));
@@ -125,8 +128,15 @@ export class Groups {
       .slice(0, MAX_CHATS);
   }
 
+  // What the groups depend on: which chats there are and what they are called. A chat
+  // working away does not change the key; its new title or summary does.
   key(sessions) {
-    return sessions.map((s) => `${s.id}:${s.lastAt || 0}:${s.ai && s.ai.gist ? 1 : 0}`).join('|');
+    return sessions.map((s) => `${s.id}:${truncate(s.title || '', 40)}:${s.ai && s.ai.gist ? truncate(s.ai.gist, 30) : ''}:${(s.files || []).length}`).join('|');
+  }
+
+  // The chats alone, for deciding whether the AI helper needs asking again.
+  idKey(sessions) {
+    return sessions.map((s) => s.id).sort().join('|');
   }
 
   current() {
@@ -140,26 +150,36 @@ export class Groups {
     const key = this.key(sessions);
     if (!force && key === this.cache.key) return this.cache.groups;
     if (this.busy) return this.busy;
-    this.busy = this.compute(sessions, key).finally(() => { this.busy = null; });
+    this.busy = this.compute(sessions, key, force).finally(() => { this.busy = null; });
     return this.busy;
   }
 
-  async compute(sessions, key) {
+  async compute(sessions, key, force = false) {
     const byId = new Map(sessions.map((s) => [s.id, s]));
     let groups = similarityGroups(sessions);
     let by = groups.length ? 'words' : 'none';
     const aiOn = this.ai && !['off', 'demo'].includes(this.ai.provider());
-    if (aiOn && sessions.length >= 2) {
+    const ids = this.idKey(sessions);
+    const sameChats = ids === this.cache.ids && Array.isArray(this.cache.aiGroups);
+    const recent = Date.now() - (this.cache.aiAt || 0) < AI_EVERY;
+    if (aiOn && sessions.length >= 2 && (force || !sameChats || !recent)) {
       try {
         const proposed = await this.askAi(sessions);
         if (proposed) {
           groups = proposed;
           by = 'ai';
+          this.cache.aiGroups = proposed;
+          this.cache.aiAt = Date.now();
+          this.cache.ids = ids;
         }
       } catch (error) {
         // The word groups stand; the error is shown in the status.
         this.cache.error = error.message;
       }
+    } else if (aiOn && sameChats) {
+      // The same chats as last time: keep the AI helper's groups, re-read against them.
+      groups = this.cache.aiGroups;
+      by = 'ai';
     }
     groups = groups
       .map((g) => ({ ...g, chats: [...new Set(g.chats)].filter((id) => byId.has(id)) }))
@@ -173,7 +193,7 @@ export class Groups {
         return { id: g.chats.slice().sort().join('+').slice(0, 200), name: truncate(String(g.name || 'related chats').toLowerCase(), 48), why: truncate(String(g.why || ''), 160), chats: g.chats, cwd, lastAt, by: g.by || by };
       })
       .sort((a, b) => b.lastAt - a.lastAt);
-    this.cache = { key, groups, at: Date.now(), by, error: this.cache.error && by !== 'ai' ? this.cache.error : null };
+    this.cache = { ...this.cache, key, groups, at: Date.now(), by, error: this.cache.error && by !== 'ai' ? this.cache.error : null };
     this.store.emit('groups', groups);
     return groups;
   }

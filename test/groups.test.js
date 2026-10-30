@@ -50,10 +50,23 @@ test('the AI helper names and proposes groups, and results are cached until chat
   assert.equal(got[0].by, 'ai');
   await groups.refresh();
   assert.equal(calls, 1, 'cached');
+  // A chat working away is not a reason to ask again.
   store.session('d').lastAt = Date.now() + 5;
   await groups.refresh();
-  assert.equal(calls, 2, 'a changed chat means a fresh look');
+  assert.equal(calls, 1, 'activity alone keeps the cached groups');
   assert.equal(groups.status().by, 'ai');
+  // A renamed chat re-reads the groups, but the same set of chats keeps the AI's answer.
+  store.session('d').title = 'Rename the headings on the work page, again';
+  await groups.refresh();
+  assert.equal(calls, 1, 'the same chats keep the AI groups');
+  assert.equal(groups.current().length, 1);
+  // A new chat means a fresh look.
+  chat(store, 'f', '/x/dbt', 'Cost gate for the staging runs', 'Added the gate to staging.', ['/x/dbt/macros/cost_gate.sql']);
+  await groups.refresh();
+  assert.equal(calls, 2, 'a new chat means a fresh look');
+  // Forcing asks again even so.
+  await groups.refresh({ force: true });
+  assert.equal(calls, 3, 'look again asks the helper');
 });
 
 test('without the AI helper, word groups are used', async () => {

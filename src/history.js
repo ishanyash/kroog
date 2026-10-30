@@ -14,6 +14,7 @@ import { claudeDir } from './config.js';
 import { detectApp } from './sources.js';
 import { describeTool, applyPlanTool, fileTouched } from './describe.js';
 import { clip, truncate, titleFromPrompt, firstLine, shortId, cleanPrompt } from './util.js';
+import { tallyOf } from './store.js';
 
 const HEAD_BYTES = 512 * 1024;
 const TAIL_BYTES = 4 * 1024 * 1024;
@@ -151,6 +152,9 @@ function toSession(sum) {
   const place = sum.entry === 'claude-vscode' ? 'VS Code or Cursor' : d.place;
   const title = sum.customTitle || sum.aiTitle || titleFromPrompt(sum.firstPrompt) || '';
   const steps = sum.steps.slice(-80);
+  // Counts over the whole chat, since only the newest steps are kept.
+  const tally = tallyOf(sum.steps.slice(0, -80));
+  const turns = sum.steps.filter((st) => st.kind === 'prompt').length;
   if (sum.lastReply) steps.push({ kind: 'reply', text: firstLine(sum.lastReply, 220), t: sum.lastAt });
   steps.unshift({ kind: 'info', text: 'Imported from Claude Code history', t: sum.startedAt || sum.lastAt });
   for (const st of steps) st.id = shortId(8);
@@ -166,6 +170,10 @@ function toSession(sum) {
     entry: sum.entry,
     gitBranch: sum.gitBranch,
     lastPrompt: clip(sum.lastPrompt, 2000),
+    firstPrompt: clip(sum.firstPrompt || '', 2000),
+    turns,
+    tally,
+    stepsDropped: Math.max(0, sum.steps.length - 80),
     lastReply: clip(sum.lastReply, 6000),
     startedAt: sum.startedAt || sum.lastAt,
     lastAt: sum.lastAt,
@@ -262,6 +270,10 @@ export async function importRecent(store, opts = {}) {
         startedAt: data.startedAt,
         lastAt: data.lastAt,
         lastPrompt: data.lastPrompt,
+        firstPrompt: data.firstPrompt,
+        turns: data.turns,
+        tally: data.tally,
+        stepsDropped: data.stepsDropped,
         lastReply: data.lastReply,
         steps: data.steps,
         plan: data.plan,

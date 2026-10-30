@@ -14,9 +14,11 @@ import { clip, truncate } from './util.js';
 
 export const API_MODEL = 'claude-haiku-5-5';
 
-const SUMMARY_SYSTEM = `You summarise one coding chat for its owner's dashboard. Be concrete: name files, commands, numbers. Plain words, no hype, no emojis.
-Reply with only JSON: {"gist": "...", "keywords": ["...", "..."]}
-- gist: one line, at most 10 words: what it is doing and where it stands, like "Cost check added; orders model test still failing". No full stop. Do not start with "The user" or "This chat".
+const SUMMARY_SYSTEM = `You summarise one coding chat for its owner, who wants to know in a few seconds what has been done and what they can do from here. Be concrete: name files, commands, numbers. Plain words, no hype, no emojis, nothing made up.
+Reply with only JSON: {"gist": "...", "done": ["...", "..."], "next": ["...", "..."], "keywords": ["...", "..."]}
+- gist: one line, at most 10 words: what it is about and where it stands, like "Cost check added; orders model test still failing". No full stop. Do not start with "The user" or "This chat".
+- done: 1 to 3 lines, each at most 14 words, what has actually been done so far (the outcome, not the steps). Empty if nothing is done yet.
+- next: 0 to 2 lines, each at most 14 words, what the owner could do from here: what is left, open, failing, or a natural follow-up. Empty if nothing is left.
 - keywords: 2 to 4 short lowercase keywords (files, tools, topics), each at most 2 words.`;
 
 const BRIEF_SYSTEM = `You merge notes from one or more coding chats into a single brief for a new or running chat. The reader is another Claude Code chat that has none of this context.
@@ -188,8 +190,12 @@ export class AiHelper {
       const text = await this.complete({ system: SUMMARY_SYSTEM, prompt: describeChat(s, { notes }), maxTokens: 400 });
       out = parseJson(text || '') || { gist: '', summary: truncate(text, 400), next: '' };
     }
+    const lines = (xs, max) => (Array.isArray(xs) ? xs : typeof xs === 'string' ? xs.split('\n') : [])
+      .map((x) => truncate(String(x || '').replace(/^[-*\u2022]\s*/, '').trim(), 140)).filter(Boolean).slice(0, max);
     s.ai = {
       gist: truncate(String(out.gist || out.summary || '').split('\n')[0].replace(/\.$/, ''), 90),
+      done: lines(out.done, 3),
+      next: lines(out.next, 2),
       keywords: (Array.isArray(out.keywords) ? out.keywords : []).map((k) => truncate(String(k).toLowerCase(), 24)).filter(Boolean).slice(0, 4),
       at: Date.now(),
       basis,
@@ -218,10 +224,12 @@ export class AiHelper {
 // ---- demo mode: no model, just plain text built from the chat --------------------------
 
 function demoSummary(s) {
-  const done = (s.plan || []).filter((p) => p.state === 'done').length;
+  const done = (s.plan || []).filter((p) => p.state === 'done');
   const todo = (s.plan || []).filter((p) => p.state !== 'done');
   return {
-    gist: todo.length ? `${done} step${done === 1 ? '' : 's'} done; next: ${truncate(todo[0].text, 40)}` : truncate(s.lastReply ? s.lastReply.split('\n')[0] : s.title || 'A chat', 70),
+    gist: todo.length ? `${done.length} step${done.length === 1 ? '' : 's'} done; next: ${truncate(todo[0].text, 40)}` : truncate(s.lastReply ? s.lastReply.split('\n')[0] : s.title || 'A chat', 70),
+    done: done.slice(-3).map((p) => p.text),
+    next: todo.slice(0, 2).map((p) => p.text),
     keywords: [...new Set((s.files || []).slice(-3).map((f) => f.split('/').pop()).concat(s.project ? [s.project] : []))].slice(0, 4),
   };
 }

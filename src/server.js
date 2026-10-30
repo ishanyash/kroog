@@ -78,7 +78,23 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
     };
   }
 
-  store.on('session', (s) => broadcast('session', engine.publicSession(s)));
+  // A working chat changes many times a second. The browser gets each chat at most a few
+  // times a second, with its latest state.
+  const pendingSessions = new Map();
+  let sessionTimer = null;
+  function flushSessions() {
+    sessionTimer = null;
+    const ids = [...pendingSessions.keys()];
+    pendingSessions.clear();
+    for (const id of ids) {
+      const s = store.session(id);
+      if (s) broadcast('session', engine.publicSession(s));
+    }
+  }
+  store.on('session', (s) => {
+    pendingSessions.set(s.id, true);
+    if (!sessionTimer) sessionTimer = setTimeout(flushSessions, 150);
+  });
   store.on('notes', () => broadcast('notes', store.data.notes));
   store.on('briefs', () => broadcast('briefs', store.pendingBriefs()));
   store.on('groups', (list) => broadcast('groups', list));
@@ -292,5 +308,5 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
   });
 
   server.on('close', () => clearInterval(heartbeat));
-  return { server, broadcast, closeClients: () => { for (const res of clients) res.end(); clients.clear(); } };
+  return { server, broadcast, closeClients: () => { clearTimeout(sessionTimer); for (const res of clients) res.end(); clients.clear(); } };
 }

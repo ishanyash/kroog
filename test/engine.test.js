@@ -11,7 +11,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function setup(settings = {}) {
   const store = new Store();
   const all = { permissionHoldSeconds: 30, driveMinutes: 5, driveEnabled: true, ...settings };
-  const engine = new Engine({ store, getSettings: () => all });
+  const copied = [];
+  const engine = new Engine({ store, getSettings: () => all, copy: async (text) => { copied.push(text); return true; } });
+  engine.copied = copied;
   const hook = (event, extra = {}, sid = 's1') => engine.handle(event, { session_id: sid, cwd: '/Users/me/code/app', ...extra }, VSCODE);
   return { store, engine, hook, settings: all };
 }
@@ -321,6 +323,9 @@ test('a typed-in brief: the context is the first message, and the hook only reco
   assert.equal(r.delivered, 'typed');
   assert.match(r.prompt, /^Write the FAQ\n\nCONTEXT: about £38 a week\.\n\n\[Kroog brief [a-z0-9]+\]$/);
   assert.equal(r.cwd, '/Users/me/code/app');
+  // The context is on the clipboard, ready to paste into the new chat.
+  assert.equal(r.copied, true);
+  assert.deepEqual(engine.copied, [r.prompt]);
   // The new chat starts in the editor with that prompt. The hook sees the tag: lineage, no second copy.
   const out = await hook('UserPromptSubmit', { prompt: r.prompt }, 'new1');
   assert.equal(out, null, 'nothing is added, the brief is already in the message');

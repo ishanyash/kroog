@@ -30,7 +30,7 @@ import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -116,6 +116,8 @@ async function start({ demo }) {
     apiKey: demo ? false : Boolean(readApiKey()),
     notesError: notes.lastError,
     claude: { ...runner.status(), registry: presence.available, open: presence.all().length },
+    // Whether the editor's own command is installed (folders then open without a dialog).
+    editorCommand: demo ? true : Boolean(runner.editor.command(settings.defaultEditor || 'vscode')),
     ai: ai.status(),
     groups: groups.status(),
     brain: brain.status(),
@@ -180,23 +182,16 @@ async function start({ demo }) {
     },
     // Open a chat, or a new chat with text typed in, in the editor: from Kroog itself, so the
     // browser never has to ask about opening vscode:// links. With a folder, that window opens first.
+    // Opens a chat (or a new one) in the editor, on its project folder. A short first
+    // message can ride along in the link; long ones go through the clipboard instead.
     'open-chat': async ({ editor, cwd, session, prompt } = {}) => {
       if (demo) return { demo: true, message: 'In the demo nothing opens. With your own chats this opens the editor.' };
       const ed = ['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : settings.defaultEditor || 'vscode';
-      const folder = String(cwd || '');
       const sid = String(session || '');
-      const text = String(prompt || '');
       if (sid && !/^[A-Za-z0-9_-]{6,80}$/.test(sid)) throw new Error('Bad chat id.');
-      const q = [];
-      if (sid) q.push(`session=${encodeURIComponent(sid)}`);
-      if (text) q.push(`prompt=${encodeURIComponent(text.slice(0, 16000))}`);
-      const url = `${ed}://anthropic.claude-code/open${q.length ? `?${q.join('&')}` : ''}`;
-      if (folder && fs.existsSync(folder)) {
-        runner.open(`${ed}://file${folder.endsWith('/') ? folder : `${folder}/`}`);
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-      runner.open(url);
-      return { url, cut: text.length > 16000 };
+      const text = String(prompt || '').slice(0, 1500);
+      const r = await runner.editor.openChat(ed, { folder: String(cwd || ''), sessionId: sid, prompt: text });
+      return { url: r.url, folder: r.folder, command: Boolean(runner.editor.command(ed)) };
     },
     // Write Library notes for one chat now (decisions, findings, how-tos, open questions).
     'notes-for': async ({ id } = {}) => {
@@ -229,7 +224,12 @@ async function start({ demo }) {
     },
     'brain-search': async ({ query = '', kinds = null, project } = {}) => ({ results: await brain.search(String(query).slice(0, 500), { kinds: Array.isArray(kinds) ? kinds : null, project }) }),
     'brain-recent': async () => ({ results: brain.recent(10) }),
-    groups: async ({ force } = {}) => ({ groups: await groups.refresh({ force: Boolean(force) }) }),
+    // Answers at once with the groups as they are; a fresh set, if the chats changed, comes
+    // through the stream when it is ready (the AI helper can take a few seconds).
+    groups: async ({ force } = {}) => {
+      groups.refresh({ force: Boolean(force) }).catch(() => {});
+      return { groups: groups.current(), status: groups.status() };
+    },
     'brain-map': async () => {
       const chats = Object.values(store.data.sessions)
         .filter((x) => !x.archived && (x.lastPrompt || x.lastReply))

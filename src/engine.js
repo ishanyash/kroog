@@ -13,8 +13,13 @@ import { detectApp } from './sources.js';
 import { Inbox, framed } from './inbox.js';
 import { Presence } from './presence.js';
 import { isJunkTitle, retitle } from './titles.js';
+import { tallyOf } from './store.js';
+import { copyText } from './clipboard.js';
 
 const BRIEF_RE = /\[(?:Kroog|Crew) brief ([a-z0-9]{4,12})\]/i;
+// What the browser gets of a chat: the newest steps, and the last reply up to here.
+const PUBLIC_STEPS = 40;
+const PUBLIC_REPLY = 2500;
 // Claude Code ends a turn anyway after 8 Stop-hook blocks in a row with no tool call.
 const BLOCK_CAP = 7;
 
@@ -37,8 +42,10 @@ function lowerFirst(text) {
 }
 
 export class Engine {
-  constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null, presence = null }) {
+  constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null, presence = null, copy = null }) {
     this.store = store;
+    // Puts text on this Mac's clipboard (see clipboard.js); swapped out in tests.
+    this.copy = copy || ((text) => copyText(text).catch(() => false));
     // Each chat's Claude Code inbox, for messages from Kroog (see inbox.js).
     this.inbox = inbox || new Inbox();
     // Claude Code's own registry of open chats (see presence.js).
@@ -97,11 +104,21 @@ export class Engine {
     return s.status !== 'ended' && this.inbox.has(s.id);
   }
 
+  // The chat as the browser sees it. Lighter than the stored one: the last steps only, with
+  // the counts of everything before them, and the last reply clipped to what the panel and
+  // a brief can use. A few hundred chats of 200 steps each made every page load slow.
   publicSession(s) {
-    const { blockStreak, ...rest } = s;
+    const { blockStreak, steps, ...rest } = s;
     const live = this.isLive(s);
+    const all = steps || [];
     return {
       ...rest,
+      steps: all.length > PUBLIC_STEPS ? all.slice(-PUBLIC_STEPS) : all,
+      stepCount: all.length + (s.stepsDropped || 0),
+      tally: tallyOf(all, s.tally),
+      firstPrompt: s.firstPrompt || ((all.find((x) => x && x.kind === 'prompt') || {}).text || ''),
+      lastReply: s.lastReply ? clip(s.lastReply, PUBLIC_REPLY) : s.lastReply,
+      aiFresh: this.ai ? this.ai.fresh(s) : undefined,
       waitingPermission: Boolean(this.waiter(s.id, 'permission')),
       inbox: live && (this.inbox.has(s.id) || Boolean(this.runner && this.runner.isRunning(s.id)) || Boolean(s.demoLive)),
       live,
@@ -707,6 +724,9 @@ export class Engine {
   // One entry point for Handoff: a brief made from chats and notes goes to a new chat,
   // a running chat, or project memory. Kroog records where it came from (lineage).
   async handoff({ text, goal = '', target = 'new', editor, sessionId, cwd, sources = [], notes = [], run = 'editor' } = {}) {
+    // Note: `run` for a new chat is 'editor' (Kroog starts it with the context, Haiku replies
+    // with what it understood, then the editor opens on it) or 'typed' (the context goes on
+    // the clipboard and a plain new chat opens: paste, press Enter). 'kroog' keeps it here.
     const body = String(text || '').trim();
     if (!body) return { ok: false, error: 'The brief is empty. Tick at least one thing to send.' };
     const from = uniq(Array.isArray(sources) ? sources.map(String) : []);
@@ -721,16 +741,22 @@ export class Engine {
       const goalLine = String(goal || '').trim();
       return this.runner.run({ mode: 'new', cwd: folder, prompt: promptFor(), title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog' });
     }
-    // The brief typed into a new chat in the editor: nothing runs until you press Enter.
-    if (target === 'new' && run === 'typed') return { ...this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds, typed: true }), delivered: 'typed', cwd: String(cwd || '') };
+    // The brief on the clipboard, for a new chat in the editor: nothing runs until you paste
+    // it and press Enter. (A link can carry a prompt too, but editors drop long ones.)
+    if (target === 'new' && run === 'typed') {
+      const made = this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds, typed: true });
+      const copied = await this.copy(made.prompt);
+      return { ...made, delivered: 'typed', copied, cwd: String(cwd || '') };
+    }
     // A new chat that lives in VS Code: Kroog starts it in the project folder with the brief
     // (one short turn), then opens it in the editor, where you carry on.
     if (target === 'new' && this.runner && this.runner.available()) {
       const folder = String(cwd || '');
       if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
       const goalLine = String(goal || '').trim();
-      const seed = `${promptFor()}\n\n(Started from Kroog. Read the brief, then reply with a short summary of what you understood and your first steps. Then stop and wait: the user carries on with you in ${editorName(editor)}.)`;
-      return this.runner.run({ mode: 'new', cwd: folder, prompt: seed, title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog', then: 'editor', editor });
+      const seed = `${promptFor()}\n\n(Started from Kroog. Read the context above, then reply in at most 6 short lines: what you understood, and the first thing you would do. Do not start work and do not edit files. Then stop and wait: the user carries on with you in ${editorName(editor)}.)`;
+      // Haiku for this one reading turn: a few seconds, not a minute.
+      return this.runner.run({ mode: 'new', cwd: folder, prompt: seed, title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog', then: 'editor', editor, model: 'haiku' });
     }
     if (target === 'new') return { ...this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds }), delivered: 'editor' };
 
