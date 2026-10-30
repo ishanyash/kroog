@@ -81,7 +81,7 @@ test('cost from a transcript: each message once, by family, agents apart, with a
   const msgs = countFile(main);
   assert.equal(msgs.length, 2, 'a streamed message counts once');
   assert.equal(familyOf('claude-opus-5-5'), 'opus');
-  assert.equal(familyOf('claude-fable-5-1'), 'opus');
+  assert.equal(familyOf('claude-fable-5-1'), 'fable');
   assert.equal(familyOf('claude-haiku-5-5'), 'haiku');
   const opus = priceOf({ input: 1e6, output: 0, cacheWrite: 0, cacheRead: 0 }, 'claude-opus-5-5');
   assert.equal(opus, DEFAULT_PRICES.opus.input);
@@ -119,4 +119,71 @@ test('the burn report: the week by chat, project, day and model, exact where the
   assert.equal(r.days.length, 7);
   assert.ok(r.projects.length === 2);
   assert.equal(r.estimate, true);
+});
+
+// Claude Code's own totals for one long session (its cost-state line), which the price
+// table must reproduce to the cent: the table is checked against Claude Code, not memory.
+test('the price table reproduces Claude Code\'s own totals for Opus 5.5 and Fable 5.1', () => {
+  const opus = priceOf({ input: 9086, output: 1257121, cacheRead: 266439590, cacheWrite: 177318 + 2981291, cacheWrite1h: 2981291 }, 'claude-opus-5-5');
+  assert.equal(opus.toFixed(4), '103.2036');
+  const fable = priceOf({ input: 9989, output: 736317, cacheRead: 341794212, cacheWrite: 1052846 + 2277499, cacheWrite1h: 2277499 }, 'claude-fable-5-1');
+  assert.equal(fable.toFixed(4), '181.0748');
+  // A 1-hour cache write costs more than a 5-minute one; Haiku has two tiers by request size.
+  assert.ok(priceOf({ cacheWrite: 1e6, cacheWrite1h: 1e6 }, 'claude-opus-5-5') > priceOf({ cacheWrite: 1e6 }, 'claude-opus-5-5'));
+  const small = priceOf({ input: 50000, output: 1000 }, 'claude-haiku-5-5');
+  const big = priceOf({ input: 150000, output: 1000 }, 'claude-haiku-5-5');
+  assert.ok(big / 3 > small * 1.5, 'over 100k tokens Haiku costs more per token');
+});
+
+function transcript(lines) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-cost-'));
+  const file = path.join(dir, 'chat.jsonl');
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n'));
+  return file;
+}
+const req = (id, ts, u, model = 'claude-opus-5-5') => ({ type: 'assistant', timestamp: ts, message: { id, model, content: [], usage: { input_tokens: u.i || 0, output_tokens: u.o || 0, cache_creation_input_tokens: u.w || 0, cache_read_input_tokens: u.r || 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: u.w || 0 } } } });
+const costState = (usd, tokens) => ({ type: 'cost-state', sessionId: 'x', totalCostUSD: usd, modelUsage: { 'claude-opus-5-5': { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: tokens, cacheCreationInputTokens: 0, costUSD: usd } } });
+
+test('Claude Code\'s own total wins when it covers the transcript, and the parts add up to it', () => {
+  const lines = [req('a', '2026-10-30T10:00:00Z', { r: 1e6, w: 1e5, o: 1e4 }), req('b', '2026-10-30T11:00:00Z', { r: 2e6, w: 1e5, o: 1e4 })];
+  const all = 3e6 + 2e5 + 2e4;
+  const book = new CostBook();
+  const priced = book.compute(transcript(lines), []);
+  assert.equal(priced.estimate, true);
+  assert.equal(priced.source, 'prices');
+  const own = book.compute(transcript([...lines, costState(5, all)]), []);
+  assert.equal(own.estimate, false);
+  assert.equal(own.source, 'claude-code');
+  assert.equal(own.usd, 5);
+  const kindsSum = Object.values(own.kinds).reduce((a, k) => a + k.usd, 0);
+  assert.ok(Math.abs(kindsSum - 5) < 0.001, 'the kinds add up to Claude Code\'s total');
+  const daySum = Object.values(own.byDay).reduce((a, d) => a + d.usd, 0);
+  assert.ok(Math.abs(daySum - 5) < 0.001, 'the days add up to it too');
+  // A total that covers far fewer tokens than the transcript (another process's) is not used.
+  const partial = book.compute(transcript([...lines, costState(0.5, all / 10)]), []);
+  assert.equal(partial.estimate, true);
+});
+
+test('the week counts only the requests made in it, not the chat\'s whole life', async () => {
+  const now = Date.parse('2026-10-30T12:00:00');
+  const old = new Date(now - 20 * 24 * HOUR).toISOString();
+  const recent = new Date(now - 2 * HOUR).toISOString();
+  const file = transcript([req('a', old, { r: 9e6, o: 1e5 }), req('b', recent, { r: 1e6, o: 1e4 })]);
+  const book = new CostBook();
+  const store = new Store();
+  const s = store.ensureSession('long', '/x/app');
+  Object.assign(s, { title: 'A long chat', lastAt: now - HOUR, startedAt: now - 20 * 24 * HOUR, status: 'done' });
+  const costs = { of: () => book.compute(file, []), prices: book.prices };
+  const r = await burnReport({ store, usage: null, costs, now });
+  const whole = book.compute(file, []).usd;
+  const recentOnly = priceOf({ cacheRead: 1e6, output: 1e4 }, 'claude-opus-5-5');
+  assert.ok(Math.abs(r.totals.usd - recentOnly) < 0.01, `the week is ${r.totals.usd}, the recent request alone`);
+  assert.ok(r.totals.usd < whole / 5);
+  assert.equal(r.chats[0].allTimeUsd, Math.round(whole * 100) / 100);
+  const daySum = r.days.reduce((a, d) => a + d.usd, 0);
+  assert.ok(Math.abs(daySum - r.totals.usd) < 0.02, 'the days add up to the header');
+  const kindSum = r.kinds.reduce((a, k) => a + k.usd, 0);
+  assert.ok(Math.abs(kindSum - r.totals.usd) < 0.02, 'so do the kinds');
+  assert.equal(r.requests, 1);
+  assert.equal(r.contextPerRequest, 1e6);
 });

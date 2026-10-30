@@ -268,11 +268,10 @@ function hoverCardHtml(s) {
     <div class="hc-foot"><span>${esc(s.project || '')}</span>${s.place ? `<span>${esc(s.place)}</span>` : ''}${(s.files || []).length ? `<span>${plural(s.files.length, 'file')}</span>` : ''}${spendText(s) ? `<span>${esc(spendText(s))}</span>` : ''}</div>`;
 }
 
-// The price table, as a short line: "opus 5/25, sonnet 3/15, haiku 1/5 (in/out)".
+// The price table, as a short line: "opus 4/20/0.2, fable 10/50/0.25, ... (in/out/cache read)".
 function pricesText(prices) {
-  const d = { opus: { input: 5, output: 25 }, sonnet: { input: 3, output: 15 }, haiku: { input: 1, output: 5 } };
-  const t = { ...d, ...(prices || {}) };
-  return `${['opus', 'sonnet', 'haiku'].map((f) => `${f} ${t[f].input}/${t[f].output}`).join(', ')} (in/out)`;
+  const t = prices || {};
+  return `${['opus', 'fable', 'sonnet', 'haiku'].filter((f) => t[f]).map((f) => `${f} ${t[f].input}/${t[f].output}/${t[f].cacheRead}`).join(', ')} (input/output/cache read)`;
 }
 
 // What a chat has cost, as Claude Code counted it (sent in by the mod).
@@ -1224,7 +1223,7 @@ function renderSetup() {
           ? `<p class="quiet">Installed (${esc(mod.version || '')}), read from <code>${esc(tildePath(mod.from || ''))}</code>${mod.current === false ? '. That is not this folder; run <code>node bin/kroog.js link</code> to point it here.' : '. It updates with git pull.'}</p>`
           : `<p>${esc(mod.reason || 'The mod is not installed.')}</p><div class="tools" style="margin:0"><button type="button" class="btn solid" id="mod-install">install the mod</button><button type="button" class="btn soft" id="mod-check">check again</button></div>
              <p class="quiet">Or, in a chat: <code>${esc(info.modLine || '')}</code>. Chats started after that send their usage.</p>`}
-        <p class="quiet">Cost per chat on the burn page is Claude Code's own figure where the mod reported it, and otherwise an estimate from the chat's transcript at these list prices (dollars per million tokens): ${esc(pricesText(st.prices))}. To change them, add a <code>prices</code> table to <code>${esc(tildePath((info.paths || {}).home || '~/.kroog'))}/settings.json</code>.</p>
+        <p class="quiet">Cost per chat on the burn page is Claude Code's own figure, which it writes into each chat's transcript (or the mod reports). Where a chat has none, Kroog prices the transcript itself at list price, in dollars per million tokens as of ${esc(info.pricesAsOf || '')}: ${esc(pricesText(info.prices))}. To change them, add a <code>prices</code> table to <code>${esc(tildePath((info.paths || {}).home || '~/.kroog'))}/settings.json</code>.</p>
       </div></section>
 
       <section class="set"><h2>AI helper ${aiState}</h2><div class="body">

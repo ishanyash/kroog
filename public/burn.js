@@ -1,6 +1,6 @@
 // The burn page: the plan's windows as they stand, the week's pace, and where the spend
-// went. Claude Code's own figures (through the mod) are exact; the rest is an estimate
-// from the transcripts at list price, and the page says so.
+// went. Claude Code's own figures (from the transcript or the mod) are exact; the rest is
+// Kroog's pricing of the transcript, marked ~. Every figure covers the same seven days.
 import { $, esc, plural, dayish } from './util.js';
 
 const B = { view: null, report: null, loading: false, timer: null, at: 0, error: '' };
@@ -111,6 +111,29 @@ function barsHtml(rows, { label, value, max, exactOf = () => true, title = () =>
   return `<ul class="bars">${rows.map((r) => `<li title="${esc(title(r))}"><span class="l">${label(r)}</span><span class="b">${value(r) > 0 ? `<i style="width:${Math.max(1, (value(r) / top) * 100).toFixed(1)}%"></i>` : ''}</span><span class="v${value(r) > 0 ? '' : ' quiet'}">${value(r) > 0 ? esc(money(value(r), { exact: exactOf(r) })) : '0'}</span></li>`).join('')}</ul>`;
 }
 
+// How the dollars add up: the tokens of each kind, and what they cost. Cache reads lead
+// because they are most of the tokens: every request re-reads the conversation so far.
+const KIND_LABEL = {
+  cacheRead: ['cache reads', 'the conversation so far, re-read on every request'],
+  cacheWrite: ['cache writes', 'new context saved for the next request'],
+  output: ['output', 'what Claude wrote, thinking included'],
+  input: ['input', 'the part not served from the cache'],
+};
+
+function kindsHtml(r) {
+  const kinds = (r.kinds || []).filter((k) => k.tokens > 0 || k.usd > 0);
+  if (!kinds.length) return '';
+  const totalUsd = kinds.reduce((a, k) => a + k.usd, 0);
+  const totalTok = kinds.reduce((a, k) => a + k.tokens, 0);
+  const top = Math.max(...kinds.map((k) => k.usd), 0.0001);
+  const ctx = r.contextPerRequest ? tokensText(r.contextPerRequest).replace(' tokens', '') : '';
+  const read = kinds.find((k) => k.kind === 'cacheRead');
+  return `<div class="adds"><h3>how it adds up</h3>
+    <ul class="bars kinds">${kinds.map((k) => `<li><span class="l"><b>${esc(KIND_LABEL[k.kind][0])}</b> <span class="quiet">${esc(KIND_LABEL[k.kind][1])}</span></span><span class="b">${k.usd > 0 ? `<i style="width:${Math.max(1, (k.usd / top) * 100).toFixed(1)}%"></i>` : ''}</span><span class="t">${esc(tokensText(k.tokens))}${totalTok ? ` <span class="quiet">(${Math.round((k.tokens / totalTok) * 100)}%)</span>` : ''}</span><span class="v">${esc(money(k.usd, { exact: !r.estimate }))}</span></li>`).join('')}</ul>
+    <p class="quiet">${r.requests ? `${esc(r.requests.toLocaleString('en-GB'))} requests to the model${ctx ? `, each re-reading about ${esc(ctx)} tokens of conversation` : ''}. ` : ''}${read && totalTok ? `Cache reads are the cheapest kind per token, but they are ${Math.round((read.tokens / totalTok) * 100)}% of the tokens, so they are ${Math.round((read.usd / Math.max(totalUsd, 0.0001)) * 100)}% of the dollars. Long chats cost more per message because every message re-reads everything before it.` : ''}</p>
+  </div>`;
+}
+
 function reportHtml(S, r) {
   const w = r.windows || { windows: {} };
   const fh = w.windows.five_hour;
@@ -125,7 +148,7 @@ function reportHtml(S, r) {
   const maxDay = Math.max(...days.map((d) => d.usd), 0);
   const families = r.families || [];
   const t = r.totals || {};
-  const estimateNote = r.estimate ? ' Figures with ~ are estimates at list price from the chat transcripts; the others are Claude Code\'s own.' : '';
+  const estimateNote = r.estimate ? ' Figures with ~ are Kroog\'s own pricing of the transcript, for chats where Claude Code did not record a total; the rest are Claude Code\'s figures.' : '';
   return `<header class="page-head"><div><h1>Burn</h1><p class="lead">Your plan's two windows, how fast they are going, and where this week's spend went.${w.at ? ` Last reading ${esc(dayish(w.at))}${w.fromChat && S.sessions.get(w.fromChat) ? ` from "${esc(S.sessions.get(w.fromChat).title || 'a chat')}"` : ''}.` : ''}</p></div>
     <div class="acts"><button type="button" class="btn soft" id="burn-again">read again</button></div></header>
   ${!haveWindows ? `<section class="burn-empty">
@@ -136,14 +159,15 @@ function reportHtml(S, r) {
   ${sd ? paceChartHtml('seven_day', sd, (r.history || {}).seven_day || []) : fh ? paceChartHtml('five_hour', fh, (r.history || {}).five_hour || []) : ''}
   <section class="went">
     <div class="section-head"><h2>where it went, last 7 days</h2><span class="n">${esc(money(t.usd, { exact: !r.estimate }))}</span><span class="quiet">${esc(plural(t.chats || 0, 'chat'))}${t.tokens ? `, ${esc(tokensText(t.tokens))}` : ''}${r.agentsUsd ? `, agents ${esc(money(r.agentsUsd, { exact: false }))}` : ''}</span></div>
-    <p class="quiet">${estimateNote.trim() || 'All figures are Claude Code\'s own.'}</p>
+    <p class="quiet">What these tokens would cost on the API at list price, the same figure Claude Code reports. On a Pro or Max plan you pay the plan's price, not this; what limits you is the two windows above.${estimateNote}</p>
+    ${kindsHtml(r)}
     <div class="went-grid">
       <div><h3>by day</h3>${barsHtml(days, { label: (d) => esc(new Date(`${d.day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }).toLowerCase()), value: (d) => d.usd, max: maxDay, exactOf: () => !r.estimate, title: (d) => tokensText(d.tokens) })}</div>
       <div><h3>by project</h3>${barsHtml(projects.slice(0, 8), { label: (p) => esc(p.project), value: (p) => p.usd, max: projects.length ? projects[0].usd : 0, exactOf: () => !r.estimate, title: (p) => `${plural(p.chats, 'chat')}, ${tokensText(p.tokens)}` })}</div>
-      <div><h3>by model</h3>${barsHtml(families, { label: (f) => esc(f.family), value: (f) => f.usd, max: families.length ? families[0].usd : 0, exactOf: () => false })}</div>
+      <div><h3>by model</h3>${barsHtml(families, { label: (f) => esc(f.family), value: (f) => f.usd, max: families.length ? families[0].usd : 0, exactOf: () => !r.estimate })}</div>
     </div>
     <h3>by chat</h3>
-    ${chats.length ? `<ul class="bars chats">${chats.slice(0, 20).map((c) => `<li><button type="button" class="l linkish" data-open="${esc(c.id)}">${esc(c.title)}</button><span class="b"><i style="width:${Math.max(1, (c.usd / Math.max(maxChat, 0.0001)) * 100).toFixed(1)}%"></i></span><span class="v" title="${esc(tokensText(c.tokens))}${c.agentsUsd ? `, agents ${esc(money(c.agentsUsd, { exact: false }))}` : ''}">${esc(money(c.usd, { exact: c.exact }))}</span><span class="quiet p">${esc(c.project)}</span></li>`).join('')}</ul>` : '<p class="quiet">No chats in the last seven days.</p>'}
+    ${chats.length ? `<ul class="bars chats">${chats.slice(0, 20).map((c) => `<li><button type="button" class="l linkish" data-open="${esc(c.id)}">${esc(c.title)}</button><span class="b"><i style="width:${Math.max(1, (c.usd / Math.max(maxChat, 0.0001)) * 100).toFixed(1)}%"></i></span><span class="v" title="${esc([c.tokens ? tokensText(c.tokens) : '', c.requests ? `${c.requests} requests` : '', c.agentsUsd ? `agents ${money(c.agentsUsd, { exact: c.exact })}` : '', c.allTimeUsd > c.usd + 0.01 ? `${money(c.allTimeUsd, { exact: c.exact })} since it started` : ''].filter(Boolean).join(', '))}">${esc(money(c.usd, { exact: c.exact }))}</span><span class="quiet p">${esc(c.project)}</span></li>`).join('')}</ul>` : '<p class="quiet">No chats in the last seven days.</p>'}
   </section>`;
 }
 

@@ -2,6 +2,14 @@
 
 Dates are 2026.
 
+## 1.4.1, 30 October
+
+- Burn counts only the seven days it shows. Before, a chat used this week counted with everything it had spent since it started, so the header could be many times the sum of the days.
+- Cost per chat is Claude Code's own figure, which it writes into each transcript. Kroog's own pricing is only for chats without one, marked ~.
+- The price table is corrected: Opus 5.5 is $4 in, $20 out, $0.20 cache read; Fable 5.1 has its own row; 1-hour cache writes have their own rate; Haiku 5.5 has two tiers. Opus and Fable reproduce Claude Code's totals to the cent.
+- "How it adds up": tokens and dollars by kind (cache reads, cache writes, output, input), requests, and the average conversation re-read per request.
+- The page says what the dollars are: API list price, not what a Pro or Max plan costs.
+
 ## 1.4.0, 30 October
 
 - Burn: the plan's 5-hour and weekly windows as a chip at the top, and a page with the week's pace and where the spend went (by day, project, model, chat).

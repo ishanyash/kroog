@@ -30,12 +30,12 @@ import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
 import { EditorOpener } from '../src/editor.js';
 import { Usage } from '../src/usage.js';
-import { CostBook } from '../src/cost.js';
+import { CostBook, PRICES_AS_OF } from '../src/cost.js';
 import { burnReport } from '../src/burn.js';
 import { modStatus, installMod, uninstallMod, installLine } from '../src/mod.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -138,6 +138,8 @@ async function start({ demo }) {
     // The mod that sends plan usage: checked now and then, not on every info() call.
     mod: demo ? { installed: true, demo: true } : modState,
     modLine: installLine(),
+    prices: costs.prices,
+    pricesAsOf: PRICES_AS_OF,
     // Whether the editor's own command is installed (folders then open without a dialog).
     editorCommand: demo ? true : Boolean(editorOpener.command(settings.defaultEditor || 'vscode')),
     ai: ai.status(),
@@ -163,17 +165,18 @@ async function start({ demo }) {
     next.ollamaModel = String(next.ollamaModel || 'llama3.2').trim().slice(0, 80);
     if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(String(next.ollamaUrl || ''))) next.ollamaUrl = 'http://127.0.0.1:11434';
     next.notesEnabled = Boolean(next.notesEnabled);
-    // The price table: four families, four numbers each, dollars per million tokens.
+    // The price table: per model family, dollars per million tokens. Four numbers are
+    // needed (input, output, cacheWrite, cacheRead); cacheWrite1h is optional.
     const prices = {};
-    for (const fam of ['opus', 'sonnet', 'haiku', 'other']) {
+    for (const fam of ['opus', 'fable', 'sonnet', 'haiku', 'other']) {
       const row = next.prices && next.prices[fam];
       if (!row || typeof row !== 'object') continue;
       const clean = {};
-      for (const k of ['input', 'output', 'cacheWrite', 'cacheRead']) {
+      for (const k of ['input', 'output', 'cacheWrite', 'cacheWrite1h', 'cacheRead']) {
         const v = Number(row[k]);
-        if (Number.isFinite(v) && v >= 0 && v <= 10000) clean[k] = v;
+        if (row[k] != null && Number.isFinite(v) && v >= 0 && v <= 10000) clean[k] = v;
       }
-      if (Object.keys(clean).length === 4) prices[fam] = clean;
+      if (['input', 'output', 'cacheWrite', 'cacheRead'].every((k) => k in clean)) prices[fam] = clean;
     }
     next.prices = Object.keys(prices).length ? prices : undefined;
     settings = next;
