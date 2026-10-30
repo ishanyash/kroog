@@ -97,10 +97,16 @@ test('a new chat in the editor gets the context through its inbox once it appear
   const engine = new Engine({ store, getSettings: () => ({}), presence: new Presence({ dir }), editor, copy: async (t) => { copied.push(t); return true; } });
   try {
     await engine.handle('UserPromptSubmit', { session_id: 'a', cwd: '/Users/me/code/app', prompt: 'Find the cost' }, { entry: 'claude-vscode' });
-    const r = await engine.handoff({ text: 'CONTEXT: about £38 a week.', goal: 'Write the FAQ', target: 'new', run: 'inbox', editor: 'vscode', cwd: '/Users/me/code/app/', sources: ['a'] });
+    const pending = engine.handoff({ text: 'CONTEXT: about £38 a week.', goal: 'Write the FAQ', target: 'new', run: 'inbox', editor: 'vscode', cwd: '/Users/me/code/app/', sources: ['a'] });
+    // The message reaches the inbox; Claude Code then runs the hook for it, which is the receipt.
+    assert.ok(await new Promise((res) => { const t = setInterval(() => { if (got.length) { clearInterval(t); res(true); } }, 20); setTimeout(() => { clearInterval(t); res(false); }, 5000); }), 'the message reached the inbox');
+    const early = got[0].trim().split('\n').map((l) => JSON.parse(l));
+    await engine.handle('UserPromptSubmit', { session_id: 'fresh-1', cwd: '/Users/me/code/app', prompt: early[1].message.content }, { entry: 'claude-vscode' });
+    const r = await pending;
     assert.equal(r.ok, true, r.error);
     assert.equal(r.delivered, 'inbox');
     assert.equal(r.id, 'fresh-1');
+    assert.equal(r.received, true, 'the hook confirmed the chat took it');
     assert.equal(opened.length, 1);
     assert.equal(opened[0].folder, '/Users/me/code/app/');
     assert.equal(opened[0].sessionId, undefined, 'no session in the link: the editor makes a fresh chat');
@@ -113,11 +119,10 @@ test('a new chat in the editor gets the context through its inbox once it appear
     assert.equal(s.status, 'working');
     assert.ok(s.steps.some((st) => st.kind === 'you' && /Started with the context from "Find the cost"/.test(st.text)));
     assert.deepEqual(copied, [], 'nothing on the clipboard when the inbox took it');
-    // The hook then sees the message come back with the tag: lineage recorded, title from the goal.
-    const out = await engine.handle('UserPromptSubmit', { session_id: 'fresh-1', cwd: '/Users/me/code/app', prompt: lines[1].message.content }, { entry: 'claude-vscode' });
-    assert.equal(out, null);
+    // The hook saw the tag: lineage recorded, title from the goal, the brief no longer waiting.
     assert.deepEqual(s.inputs.find((x) => x.kind === 'brief').from, ['a']);
     assert.equal(s.title, 'Write the FAQ');
+    assert.equal(store.pendingBriefs().length, 0);
   } finally {
     server.close();
   }
@@ -133,4 +138,23 @@ test('when no new chat shows up, the context goes on the clipboard instead', asy
   assert.equal(r.delivered, 'paste');
   assert.equal(r.copied, true);
   assert.deepEqual(copied, ['Hello there']);
+});
+
+test('without a hook receipt, Kroog says the chat has not taken the message yet', async () => {
+  const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
+  const socket = path.join(sockDir, 'held.sock');
+  const server = net.createServer((c) => c.on('data', () => {}));
+  await new Promise((r) => server.listen(socket, r));
+  const dir = registry([{ pid: process.pid, sessionId: 'held-1', cwd: '/Users/me/code/app', entrypoint: 'claude-vscode', status: 'idle', statusUpdatedAt: Date.now(), startedAt: Date.now(), messagingSocketPath: socket, token: 'tok' }]);
+  const store = new Store();
+  const engine = new Engine({ store, getSettings: () => ({}), presence: new Presence({ dir }), editor: { openChat: async () => ({ ok: true, url: 'x', folder: 'command' }), openFolder: () => ({ ok: true, how: 'command' }), command: () => '/usr/local/bin/code' }, copy: async () => true });
+  try {
+    engine.syncPresence();
+    const brief = store.saveBrief('CONTEXT', '', { sources: [], notes: [], target: 'running', targetId: 'held-1' });
+    const r = await engine.sendIntoEditor({ editor: 'vscode', session: store.session('held-1'), prompt: 'CONTEXT', briefId: brief.id, wait: 2000, receiptWait: 400 });
+    assert.equal(r.delivered, 'inbox');
+    assert.equal(r.received, false, 'no hook fired within the wait');
+  } finally {
+    server.close();
+  }
 });

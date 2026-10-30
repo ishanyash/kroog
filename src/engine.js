@@ -782,7 +782,21 @@ export class Engine {
   // inbox, as its first message. No prompt rides in the link (editors drop long ones) and
   // no session is looked up (the editor only finds sessions it made itself). If no new chat
   // appears within `wait`, the text goes on the clipboard instead, and the caller says so.
-  async startInEditor({ editor, cwd, prompt, label = '', wait = 45000 } = {}) {
+  // Whether the chat took a message sent through its inbox: the hook fires for it and sees
+  // the brief's tag. A chat that skips permission prompts can hold messages from other
+  // sessions for approval instead (Claude Code's crossSessionInbound); then this says so.
+  async receipt(briefId, sid, wait = 10000) {
+    if (!briefId) return null;
+    const deadline = Date.now() + wait;
+    while (Date.now() < deadline) {
+      const b = this.store.data.briefs[briefId];
+      if (b && b.usedBy === sid) return true;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  }
+
+  async startInEditor({ editor, cwd, prompt, label = '', wait = 45000, briefId = '', receiptWait = 10000 } = {}) {
     const folder = String(cwd || '');
     const body = String(prompt || '').trim();
     if (!body) return { ok: false, error: 'Nothing to send.' };
@@ -806,7 +820,12 @@ export class Engine {
     }
     if (found) {
       const r = await this.send(found.sid, body, { label });
-      if (r.ok && r.delivered === 'inbox') return { ok: true, delivered: 'inbox', id: found.sid };
+      if (r.ok && r.delivered === 'inbox') {
+        const received = await this.receipt(briefId, found.sid, receiptWait);
+        // The chat has it either way (held for approval at worst): the brief is no longer waiting.
+        if (briefId && this.store.data.briefs[briefId] && !this.store.data.briefs[briefId].usedBy) this.store.useBrief(briefId, found.sid);
+        return { ok: true, delivered: 'inbox', id: found.sid, received };
+      }
     }
     const copied = await this.copy(body);
     return { ok: true, delivered: 'paste', id: found ? found.sid : null, copied };
@@ -827,7 +846,7 @@ export class Engine {
       if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
       const made = this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds, typed: true });
       const names = from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
-      const r = await this.startInEditor({ editor, cwd: folder, prompt: made.prompt, label: names.length ? `Started with the context from ${names.join(' and ')}` : 'Started with the context from Kroog' });
+      const r = await this.startInEditor({ editor, cwd: folder, prompt: made.prompt, briefId: made.id, label: names.length ? `Started with the context from ${names.join(' and ')}` : 'Started with the context from Kroog' });
       return { ...made, ...r, cwd: folder };
     }
     // The brief on the clipboard, for a new chat in the editor: nothing runs until you paste
@@ -858,9 +877,10 @@ export class Engine {
       const r = await this.send(s.id, message, { label, mode: 'inbox' });
       if (r.ok && r.delivered === 'inbox') {
         this.recordInput(s, input);
-        this.store.useBrief(brief.id, s.id);
         this.store.touch(s);
-        return r;
+        const received = await this.receipt(brief.id, s.id);
+        if (!this.store.data.briefs[brief.id].usedBy) this.store.useBrief(brief.id, s.id);
+        return { ...r, received };
       }
     }
     // Kroog is holding its Stop hook, or the chat is working without an inbox (an older
@@ -875,15 +895,15 @@ export class Engine {
     // its inbox, then send; the chat carries on in the editor, as always.
     if (!this.openable(s)) return { ok: false, error: 'This chat was started by an older Kroog, so the editor cannot open it and Kroog cannot reach it. Start a new chat from it instead.' };
     const ed = s.editor || (['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : 'vscode');
-    const r = await this.sendIntoEditor({ editor: ed, session: s, prompt: message, label });
-    if (r.ok && r.delivered === 'inbox') { this.recordInput(s, input); this.store.useBrief(brief.id, s.id); this.store.touch(s); }
+    const r = await this.sendIntoEditor({ editor: ed, session: s, prompt: message, label, briefId: brief.id });
+    if (r.ok && r.delivered === 'inbox') { this.recordInput(s, input); if (!this.store.data.briefs[brief.id].usedBy) this.store.useBrief(brief.id, s.id); this.store.touch(s); }
     return { ...r, id: brief.id, prompt: message };
   }
 
   // An existing chat, opened in the editor and then fed through its inbox: the editor finds
   // chats it made (and terminal ones from the same folder); the registry then shows the chat
   // with its socket, and the text goes in. The clipboard if it does not show up in time.
-  async sendIntoEditor({ editor, session, prompt, label = '', wait = 45000 } = {}) {
+  async sendIntoEditor({ editor, session, prompt, label = '', wait = 45000, briefId = '', receiptWait = 10000 } = {}) {
     const s = session;
     const opened = await this.editor.openChat(editor, { folder: s.cwd || '', sessionId: s.id });
     if (opened.folder === 'demo') return { ok: true, delivered: 'demo' };
@@ -893,7 +913,7 @@ export class Engine {
       this.syncPresence();
       if (this.inbox.has(s.id)) {
         const r = await this.send(s.id, prompt, { label, mode: 'inbox' });
-        if (r.ok && r.delivered === 'inbox') return { ok: true, delivered: 'inbox', id: s.id };
+        if (r.ok && r.delivered === 'inbox') return { ok: true, delivered: 'inbox', id: s.id, received: await this.receipt(briefId, s.id, receiptWait) };
         break;
       }
     }

@@ -928,15 +928,13 @@ async function sendHandoff() {
   h.sending = false;
   if (!r) { hideToast(); renderAll(false); return; }
   const target = S.sessions.get(h.runTarget);
-  if (r.delivered === 'inbox' && h.target === 'new') {
-    toast(`The context went into the new chat in ${EDITORS[h.editor] || 'VS Code'}. It is reading it there now.`, 8000);
-    endHandoff();
-    if (r.id) { UI.selected = r.id; renderAll(false); if (UI.route === 'lineage') setTimeout(() => reveal(r.id, true), 150); }
-    return;
-  }
   if (r.delivered === 'inbox') {
-    toast(`Sent. The context went into "${trim((target && target.title) || 'the chat', 40)}" as its next message.`, 7000);
+    const ed = EDITORS[h.editor] || 'VS Code';
+    const name = h.target === 'new' ? `the new chat in ${ed}` : `"${trim((target && target.title) || 'the chat', 40)}"`;
+    if (r.received === false) toast(`The context was sent to ${name}, but the chat has not taken it yet. If that chat skips permission prompts, ${ed} holds messages from other sessions for your approval: approve it there. To stop that, set "crossSessionInbound": "accept" in ~/.claude/settings.json.`, 16000);
+    else toast(h.target === 'new' ? `The context went into ${name}. It is reading it there now.` : `Sent. The context went into ${name} as its next message.`, 8000);
     endHandoff();
+    if (h.target === 'new' && r.id) { UI.selected = r.id; renderAll(false); if (UI.route === 'lineage') setTimeout(() => reveal(r.id, true), 150); }
     return;
   }
   if (r.delivered === 'demo') {
