@@ -17,7 +17,7 @@ import { retitle } from '../src/titles.js';
 import { SecondBrain } from '../src/memory/index.js';
 import { runMcp, mcpAddArgs } from '../src/mcp.js';
 import { cleanEnv } from '../src/claude-cli.js';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
 import { Store } from '../src/store.js';
@@ -229,11 +229,16 @@ async function start({ demo }) {
 
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is busy. Kroog may already be running: open http://127.0.0.1:${port}`);
-      console.error('Or run on another port with --port 4878 (then run link again with the same --port).');
-    } else {
-      console.error(error.message);
+      whoIsOn(port).then((who) => {
+        if (who) console.error(`${who.name} ${who.version} is already running on port ${port}${who.pid ? ` (process ${who.pid})` : ''}.`);
+        else console.error(`Port ${port} is busy, and it does not answer like Kroog.`);
+        console.error(`To stop it and start this version: node bin/kroog.js stop && node bin/kroog.js start`);
+        console.error('Or run on another port with --port 4878 (then run link again with the same --port).');
+        process.exit(1);
+      });
+      return;
     }
+    console.error(error.message);
     process.exit(1);
   });
 
@@ -306,6 +311,49 @@ async function start({ demo }) {
   process.on('SIGTERM', shutdown);
 }
 
+// What is listening on Kroog's port: an older Kroog or Crew, or something else.
+async function whoIsOn(port) {
+  let info = null;
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/state`, { signal: AbortSignal.timeout(1500) });
+    if (r.ok) info = (await r.json()).info || null;
+  } catch { /* not Kroog, or not answering */ }
+  if (!info || !info.version) return null;
+  const name = String((info.paths && info.paths.home) || '').includes('.crew') ? 'Crew' : 'Kroog';
+  return { name, version: info.version, pid: pidOnPort(port) };
+}
+
+function pidOnPort(port) {
+  try {
+    const out = execFileSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8', timeout: 5000 });
+    const pid = Number(out.trim().split('\n')[0]);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function stop() {
+  const settings = loadSettings();
+  const port = Number(option('port') || settings.port || DEFAULT_SETTINGS.port);
+  const who = await whoIsOn(port);
+  if (!who) {
+    console.log(`Nothing that looks like Kroog is running on port ${port}.`);
+    return;
+  }
+  if (!who.pid) {
+    console.log(`${who.name} ${who.version} is running on port ${port}, but its process could not be found. Press Ctrl+C in its Terminal window.`);
+    return;
+  }
+  process.kill(who.pid, 'SIGTERM');
+  const until = Date.now() + 5000;
+  while (Date.now() < until) {
+    try { process.kill(who.pid, 0); } catch { console.log(`Stopped ${who.name} ${who.version} (process ${who.pid}).`); return; }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  console.log(`Asked ${who.name} ${who.version} (process ${who.pid}) to stop. If it is still running, press Ctrl+C in its window.`);
+}
+
 function status() {
   const p = paths();
   const s = linkStatus();
@@ -327,6 +375,7 @@ function help() {
   node bin/kroog.js start     Run Kroog for your real chats, then open http://127.0.0.1:${DEFAULT_SETTINGS.port}
   node bin/kroog.js unlink    Remove Kroog's hooks from ~/.claude/settings.json.
   node bin/kroog.js status    Show what's linked and where Kroog keeps its files.
+  node bin/kroog.js stop      Stop the Kroog (or old Crew) that is running.
   node bin/kroog.js doctor    Check everything Kroog needs, and say what to fix.
 
 Options: --port 4878 (use the same port for link and start), --no-open (don't open the browser), --no-import (don't bring in chats from the last 7 days)`);
@@ -360,6 +409,9 @@ try {
     case 'mcp':
       // Started by Claude Code as the kroog-brain tool. Only protocol messages on stdout.
       await runMcp({ dir: nodePath.join(paths().home, 'brain'), claudeDir: claudeDir(), getSettings: loadSettings, version: VERSION });
+      break;
+    case 'stop':
+      await stop();
       break;
     case 'doctor':
       printDoctor(await doctor({ version: VERSION }));

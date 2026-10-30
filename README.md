@@ -27,7 +27,7 @@ node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/s
 node bin/kroog.js start     # run it; opens http://127.0.0.1:4877
 ```
 
-Keep the Terminal window with `start` open while you use Kroog. To update later, run `git pull` in `~/kroog`, then `start` again.
+Keep the Terminal window with `start` open while you use Kroog. To update later, run `git pull` in `~/kroog`, then `node bin/kroog.js stop` and `start` again. If `start` says the port is busy, an older copy is still running: `stop` ends it.
 
 **Coming from Crew?** Just run `start` (or `link`). Kroog moves `~/.crew` to `~/.kroog` and repoints Claude Code's hooks itself.
 
@@ -101,6 +101,7 @@ The AI helper writes the one-line summaries, merged briefs and library notes. By
 | `node bin/kroog.js demo` | Try it with made-up chats. Changes nothing. |
 | `node bin/kroog.js link` | Connect Claude Code to Kroog. |
 | `node bin/kroog.js start` | Run Kroog. Also brings in your chats from the last 7 days (`--no-import` to skip). |
+| `node bin/kroog.js stop` | Stop the Kroog (or old Crew) that is running. |
 | `node bin/kroog.js doctor` | Check everything and say what to fix. |
 | `node bin/kroog.js status` | Show what is linked and where Kroog keeps its files. |
 | `node bin/kroog.js unlink` | Remove Kroog's hooks. |
