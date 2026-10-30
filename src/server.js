@@ -56,7 +56,7 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
-export function createServer({ port, token, engine, store, mode, getSettings, updateSettings, info, actions }) {
+export function createServer({ port, token, engine, store, mode, getSettings, updateSettings, info, actions, groups = null }) {
   const clients = new Set();
   engine.hasViewers = () => clients.size > 0;
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
@@ -72,6 +72,7 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
       sessions: Object.values(store.sessions).map((s) => engine.publicSession(s)),
       notes: store.data.notes,
       briefs: store.pendingBriefs(),
+      groups: groups ? groups.current() : [],
       settings: getSettings(),
       info: info(),
     };
@@ -80,6 +81,7 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
   store.on('session', (s) => broadcast('session', engine.publicSession(s)));
   store.on('notes', () => broadcast('notes', store.data.notes));
   store.on('briefs', () => broadcast('briefs', store.pendingBriefs()));
+  store.on('groups', (list) => broadcast('groups', list));
   store.on('info', () => broadcast('info', info()));
   const heartbeat = setInterval(() => {
     for (const res of clients) res.write(': ping\n\n');

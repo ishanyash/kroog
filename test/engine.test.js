@@ -312,3 +312,20 @@ test('lineage: a brief to project memory keeps its sources', async () => {
   assert.equal(note.remembered, true);
   assert.deepEqual(note.from, ['x']);
 });
+
+test('a typed-in brief: the context is the first message, and the hook only records the lineage', async () => {
+  const { store, engine, hook } = setup();
+  await hook('UserPromptSubmit', { prompt: 'Find the cost' }, 'a');
+  await hook('Stop', { last_assistant_message: 'About £38 a week.' }, 'a');
+  const r = await engine.handoff({ text: 'CONTEXT: about £38 a week.', goal: 'Write the FAQ', target: 'new', run: 'typed', editor: 'vscode', cwd: '/Users/me/code/app', sources: ['a'] });
+  assert.equal(r.delivered, 'typed');
+  assert.match(r.prompt, /^Write the FAQ\n\nCONTEXT: about £38 a week\.\n\n\[Kroog brief [a-z0-9]+\]$/);
+  assert.equal(r.cwd, '/Users/me/code/app');
+  // The new chat starts in the editor with that prompt. The hook sees the tag: lineage, no second copy.
+  const out = await hook('UserPromptSubmit', { prompt: r.prompt }, 'new1');
+  assert.equal(out, null, 'nothing is added, the brief is already in the message');
+  const s = store.session('new1');
+  assert.deepEqual(s.inputs.find((x) => x.kind === 'brief').from, ['a']);
+  assert.equal(s.title, 'Write the FAQ');
+  assert.equal(store.data.briefs[r.id].usedBy, 'new1');
+});

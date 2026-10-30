@@ -247,8 +247,10 @@ export class Engine {
         if (match) {
           const brief = store.data.briefs[match[1].toLowerCase()];
           if (brief) {
-            context.push(brief.text);
+            // When the brief itself is in the message (typed in from Kroog), only record it.
+            if (!prompt.includes(brief.text.slice(0, 160))) context.push(brief.text);
             store.useBrief(brief.id, s.id);
+            if (fromUser && brief.goal && !s.turns) s.title = truncate(brief.goal, 80);
             this.recordInput(s, { kind: 'brief', brief: brief.id, from: (brief.sources || []).filter((id) => id !== s.id), notes: brief.notes || [], words: countWords(brief.text) });
             store.addStep(s, { kind: 'info', text: s.turns ? 'Got a brief from Kroog' : 'Started with a brief from Kroog' });
           }
@@ -276,6 +278,10 @@ export class Engine {
         }
         const text = describeTool(name, input);
         s.now = helper ? `${helper}: ${text}` : text;
+        // An agent is about to start: remember what it was asked, for the SubagentStart hook.
+        if ((name === 'Task' || name === 'Agent') && !helper) {
+          s.pendingAgents = [...(s.pendingAgents || []), { type: String(input.subagent_type || ''), task: truncate(input.description || firstLine(input.prompt || '', 140), 160), t: Date.now() }].slice(-6);
+        }
         const waitingHere = s.needs && s.needs.kind === 'permission' && this.waiter(sid, 'permission');
         if (!waitingHere) store.setStatus(s, 'working', null);
         store.addStep(s, { kind: 'tool', text, toolUseId: body.tool_use_id || null, tool: name, state: 'running', helper });
@@ -471,20 +477,27 @@ export class Engine {
       }
 
       case 'SubagentStart': {
-        const type = body.agent_type || 'helper';
-        s.helpers[body.agent_id || shortId(8)] = { type, state: 'working', t: Date.now() };
-        store.addStep(s, { kind: 'helper', text: `Helper "${type}" started` });
+        const type = body.agent_type || 'agent';
+        const pending = s.pendingAgents || [];
+        const i = pending.findIndex((p) => !p.type || p.type === type);
+        const asked = i >= 0 ? pending.splice(i, 1)[0] : null;
+        s.pendingAgents = pending;
+        s.helpers[body.agent_id || shortId(8)] = { type, state: 'working', t: Date.now(), task: asked ? asked.task : '' };
+        store.addStep(s, { kind: 'helper', text: `Agent "${type}" started${asked && asked.task ? `: ${asked.task}` : ''}` });
         store.touch(s);
         return NO_OUTPUT;
       }
 
       case 'SubagentStop': {
         const known = s.helpers[body.agent_id];
-        const type = (known && known.type) || body.agent_type || 'helper';
-        if (known) known.state = 'done';
-        else s.helpers[body.agent_id || shortId(8)] = { type, state: 'done', t: Date.now() };
-        const result = body.last_assistant_message ? `: ${firstLine(body.last_assistant_message, 140)}` : '';
-        store.addStep(s, { kind: 'helper', text: `Helper "${type}" finished${result}` });
+        const type = (known && known.type) || body.agent_type || 'agent';
+        const result = body.last_assistant_message ? firstLine(body.last_assistant_message, 200) : '';
+        if (known) {
+          known.state = 'done';
+          known.result = result;
+          known.endedAt = Date.now();
+        } else s.helpers[body.agent_id || shortId(8)] = { type, state: 'done', t: Date.now(), result };
+        store.addStep(s, { kind: 'helper', text: `Agent "${type}" finished${result ? `: ${result}` : ''}` });
         store.touch(s);
         return NO_OUTPUT;
       }
@@ -677,13 +690,18 @@ export class Engine {
     return { ok: true };
   }
 
-  createBrief({ text, goal, editor, sources = [], notes = [] }) {
+  // A brief for a new chat in the editor. `typed`: the whole brief goes into the first
+  // message, so it is readable in the chat; otherwise only a short line with a tag goes in
+  // and the hook attaches the brief. Either way Kroog records where the new chat came from.
+  createBrief({ text, goal, editor, sources = [], notes = [], typed = false }) {
     const body = String(text || '').trim();
     if (!body) return { ok: false, error: 'The brief is empty.' };
     const scheme = ['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : 'vscode';
     const brief = this.store.saveBrief(clip(body, 9000), String(goal || '').trim(), { sources, notes, target: 'new', editor: scheme });
-    const prompt = `${brief.goal || 'Pick up from the brief.'} [Kroog brief ${brief.id}]`;
-    return { ok: true, id: brief.id, prompt, url: `${scheme}://anthropic.claude-code/open?prompt=${encodeURIComponent(prompt)}` };
+    const prompt = typed
+      ? `${brief.goal || 'Context for this chat, from Kroog.'}\n\n${brief.text}\n\n[Kroog brief ${brief.id}]`
+      : `${brief.goal || 'Pick up from the brief.'} [Kroog brief ${brief.id}]`;
+    return { ok: true, id: brief.id, prompt, typed, url: `${scheme}://anthropic.claude-code/open?prompt=${encodeURIComponent(prompt)}` };
   }
 
   // One entry point for Handoff: a brief made from chats and notes goes to a new chat,
@@ -703,6 +721,8 @@ export class Engine {
       const goalLine = String(goal || '').trim();
       return this.runner.run({ mode: 'new', cwd: folder, prompt: promptFor(), title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog' });
     }
+    // The brief typed into a new chat in the editor: nothing runs until you press Enter.
+    if (target === 'new' && run === 'typed') return { ...this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds, typed: true }), delivered: 'typed', cwd: String(cwd || '') };
     // A new chat that lives in VS Code: Kroog starts it in the project folder with the brief
     // (one short turn), then opens it in the editor, where you carry on.
     if (target === 'new' && this.runner && this.runner.available()) {

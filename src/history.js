@@ -102,6 +102,13 @@ export function summarise(entries, { id, fallbackTime = Date.now(), info = {} } 
       if (Array.isArray(msg.content)) {
         for (const b of msg.content) {
           if (b && b.type === 'tool_result' && byTool.has(b.tool_use_id)) byTool.get(b.tool_use_id).state = b.is_error ? 'failed' : 'ok';
+          // What an agent came back with.
+          if (b && b.type === 'tool_result' && out.helpers[b.tool_use_id]) {
+            const c = b.content;
+            const text = typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text).join('\n') : '';
+            out.helpers[b.tool_use_id].result = firstLine(text, 200);
+            if (b.is_error) out.helpers[b.tool_use_id].state = 'failed';
+          }
         }
       }
       if (helper || e.isMeta) continue;
@@ -126,7 +133,7 @@ export function summarise(entries, { id, fallbackTime = Date.now(), info = {} } 
         const f = fileTouched(b.name, input);
         if (f && !out.files.includes(f)) out.files.push(f);
         if ((b.name === 'Task' || b.name === 'Agent') && (input.subagent_type || input.description)) {
-          out.helpers[b.id || `h${Object.keys(out.helpers).length}`] = { type: String(input.subagent_type || 'helper'), state: 'done', t };
+          out.helpers[b.id || `h${Object.keys(out.helpers).length}`] = { type: String(input.subagent_type || 'agent'), state: 'done', t, task: truncate(input.description || firstLine(input.prompt || '', 140), 160) };
         }
       }
     }

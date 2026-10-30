@@ -7,14 +7,14 @@ import {
 import { renderBrain } from './brain.js';
 import { mountLineage, unmountLineage, renderLineage, isMounted, fit, zoomBy, reveal, nextNeeding, setWater, themeChanged, shiftWeek } from './lineage.js';
 
-const S = { sessions: new Map(), notes: [], briefs: [], settings: {}, info: {}, connected: false, lastEventAt: 0 };
+const S = { sessions: new Map(), notes: [], briefs: [], groups: [], settings: {}, info: {}, connected: false, lastEventAt: 0 };
 const UI = {
   route: 'lineage',
   selected: null,
   logOpen: false,
   demoSeen: false,
   list: { filter: 'all', query: '' },
-  handoff: { active: false, sources: [], notes: [], goal: '', target: 'new', editor: '', runTarget: '', memoryCwd: '', short: false, run: 'editor', newCwd: '', aiText: null, aiBusy: false },
+  handoff: { active: false, sources: [], notes: [], goal: '', target: 'new', editor: '', runTarget: '', memoryCwd: '', short: false, run: 'typed', newCwd: '', aiText: null, aiBusy: false },
   // A new chat started from a lane's "+ new chat".
   newChat: null,
   hover: null,
@@ -86,12 +86,32 @@ function openUrl(url) {
   window.location.href = url;
 }
 
+// Open a chat (or a new chat with text typed in) in the editor. Kroog opens it from the Mac
+// itself when it can, so the browser never asks about vscode:// links; with a folder, that
+// window opens first.
+async function openInEditor({ editor, cwd, session, prompt } = {}) {
+  const ed = editor || S.settings.defaultEditor || 'vscode';
+  const q = [];
+  if (session) q.push(`session=${encodeURIComponent(session)}`);
+  if (prompt) q.push(`prompt=${encodeURIComponent(prompt)}`);
+  const url = `${ed}://anthropic.claude-code/open${q.length ? `?${q.join('&')}` : ''}`;
+  try {
+    const r = await post('open-chat', { editor: ed, cwd, session, prompt });
+    if (r.demo) { toast(r.message, 6000); return true; }
+    return true;
+  } catch {
+    openUrl(url);
+    return true;
+  }
+}
+
 // ---------------------------------------------------------------- live updates
 
 function applySnapshot(data) {
   S.sessions = new Map(data.sessions.map((s) => [s.id, s]));
   S.notes = data.notes || [];
   S.briefs = data.briefs || [];
+  S.groups = data.groups || [];
   S.settings = data.settings || {};
   S.info = data.info || {};
   for (const s of S.sessions.values()) UI.previous.set(s.id, s.status);
@@ -114,6 +134,7 @@ function connect() {
   });
   es.addEventListener('notes', (e) => { S.notes = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('briefs', (e) => { S.briefs = JSON.parse(e.data); scheduleRender(); });
+  es.addEventListener('groups', (e) => { S.groups = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('settings', (e) => { S.settings = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('info', (e) => { S.info = JSON.parse(e.data); scheduleRender(); });
   es.onopen = () => { S.connected = true; renderTop(); };
@@ -294,7 +315,7 @@ function connectTo(targetId, newCwd = '') {
   const sources = (UI.linking && UI.linking.sources) || [];
   UI.linking = null;
   const h = UI.handoff;
-  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: newCwd ? 'new' : 'running', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: newCwd ? '' : targetId, memoryCwd: '', short: false, run: 'editor', newCwd, aiText: null, aiBusy: false, extra: h.extra || [] };
+  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: newCwd ? 'new' : 'running', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: newCwd ? '' : targetId, memoryCwd: '', short: false, run: h.run || 'typed', newCwd, aiText: null, aiBusy: false, extra: h.extra || [] };
   for (const id of sources) addSource(id);
   UI.selected = null;
   UI.newChat = null;
@@ -373,56 +394,41 @@ function renderSide() {
   if (side.dataset.mode !== 'chat' || side.dataset.id !== s.id) {
     side.dataset.mode = 'chat';
     side.dataset.id = s.id;
-    side.innerHTML = `<div class="side-head" id="side-head"></div><div class="side-body convo" id="side-body"></div>${composerHtml()}`;
-    bindComposer();
-    UI.scrollToEnd = true;
+    side.innerHTML = `<div class="side-head" id="side-head"></div><div class="side-body profile" id="side-body"></div><div class="side-foot" id="side-foot"></div>`;
     UI.menuOpen = false;
-    UI.branchFor = null;
+    UI.showConvo = false;
   }
+  const body = $('#side-body');
+  const scroll = body.scrollTop;
   preserveFocus(() => {
     $('#side-head').innerHTML = sideHeadHtml(s);
     $('#side-head').className = `side-head k-${look(s).k}`;
+    body.innerHTML = profileHtml(s);
+    $('#side-foot').innerHTML = footHtml(s);
   });
-  fetchTranscript(s);
-  renderConversation(s);
-  updateComposer(s);
+  body.scrollTop = scroll;
+  if (UI.showConvo) fetchTranscript(s);
 }
 
 function newChatHtml() {
   const cwd = UI.newChat.cwd;
   const ed = S.settings.defaultEditor || 'vscode';
   return `<div class="side-head k-working"><div class="row"><span class="w">new chat<span class="when">${esc(folderName(cwd))}</span></span><button type="button" class="icon-btn" data-newchat-cancel aria-label="Cancel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <h2>Start a chat in ${esc(folderName(cwd))}</h2>
+      <h2>New chat in ${esc(folderName(cwd))}</h2>
       <div class="where"><span>${esc(tildePath(cwd))}</span></div></div>
     <div class="side-body">
-      <div class="field"><label for="nc-text">What should it do?</label><textarea id="nc-text" rows="6" placeholder="For example: add a test for the weekly cost model">${esc(UI.newChat.text || '')}</textarea></div>
-      <label class="check"><input type="checkbox" id="nc-edits" ${S.settings.kroogPermissionMode === 'acceptEdits' ? 'checked' : ''}><span>let it edit files without asking (commands still ask)</span></label>
-      <p class="quiet">${canRun() ? 'It runs here in Kroog with your usual Claude Code login and settings. Questions about edits and commands show up here. Later you can carry it on in VS Code, where it is in the session history.' : 'Kroog could not find Claude Code on this Mac, so it can only open the chat in your editor. See setup.'}</p>
+      <div class="field"><label for="nc-text">First message (optional)</label><textarea id="nc-text" rows="6" placeholder="For example: add a test for the weekly cost model">${esc(UI.newChat.text || '')}</textarea></div>
+      <p class="quiet">Opens ${esc(EDITORS[ed] || 'VS Code')} on this folder with a new Claude Code chat, your message typed in. To start from what other chats worked out, use the link key on those chats instead.</p>
     </div>
-    <div class="composer"><div class="row"><button type="button" class="btn soft" id="nc-editor">open in ${esc(EDITORS[ed] || 'VS Code')}</button><button type="button" class="btn solid" id="nc-start" ${canRun() ? '' : 'disabled'}>start in kroog</button></div></div>`;
+    <div class="side-foot"><div class="row end"><button type="button" class="btn solid" id="nc-editor">open in ${esc(EDITORS[ed] || 'VS Code')}</button></div></div>`;
 }
 
-async function startNewChat() {
-  const text = ($('#nc-text') || {}).value || '';
-  if (!text.trim()) { toast('Write what it should do first.'); return; }
-  const btn = $('#nc-start');
-  if (btn) btn.disabled = true;
-  const r = await act(post('run', { cwd: UI.newChat.cwd, prompt: text, permissionMode: ($('#nc-edits') || {}).checked ? 'acceptEdits' : 'default' }), 'Started. It runs here in Kroog.');
-  if (btn) btn.disabled = false;
-  if (!r) return;
-  UI.newChat = null;
-  UI.selected = r.id;
-  renderAll(false);
-  if (UI.route === 'lineage') setTimeout(() => reveal(r.id, true), 120);
-}
+// ---------------------------------------------------------------- the chat panel: a profile
+// Kroog shows what a chat is about, what it did, which agents it used, what it learned and
+// where it came from. Talking to the chat happens in the editor; from here you open it there,
+// or start a new chat from what this one worked out.
 
-// ---------------------------------------------------------------- the chat panel
-// The panel shows the real conversation, read from Claude Code's own history file, the way
-// Claude Code shows it. What you send from here goes into the same chat (its inbox), so the
-// chat in VS Code and this panel are two windows on one conversation.
-
-const TX = new Map();       // chat id -> { items, found, loading, key }
-const OUTBOX = new Map();   // chat id -> [{ text, t, state }] messages sent from Kroog, until the chat shows them
+const TX = new Map(); // chat id -> { items, found, loading, key }
 
 function txKey(s) { return `${s.lastAt || 0}|${(s.steps || []).length}`; }
 
@@ -435,7 +441,7 @@ function fetchTranscript(s) {
     .then((r) => r.json())
     .then((d) => { TX.set(s.id, { items: d.items || [], found: Boolean(d.found), more: d.more, loading: false, key }); })
     .catch(() => { TX.set(s.id, { ...(TX.get(s.id) || {}), loading: false, key }); })
-    .finally(() => { if (UI.selected === s.id) renderConversation(S.sessions.get(s.id)); });
+    .finally(() => { if (UI.selected === s.id && UI.showConvo) renderAll(false); });
 }
 
 // Without a history file (the demo, or a chat on another machine), build it from the steps.
@@ -452,13 +458,12 @@ function itemsFromSteps(s) {
 }
 
 function placeName(s) {
-  if (s.owner === 'kroog') return 'Kroog';
+  if (s.owner === 'kroog' && !s.live) return 'Kroog';
   return s.place && s.place !== 'Unknown app' ? s.place : edName(s);
 }
 
-// Where the chat is, and whether Kroog can reach it.
 function whereLine(s) {
-  if (kroogRunning(s)) return '<span class="live">running in kroog</span>';
+  if (kroogRunning(s)) return '<span class="live">kroog is starting it</span>';
   if (s.live) return `<span class="live">open in ${esc(placeName(s))}</span>`;
   return `<span>not open now · last in ${esc(placeName(s))}</span>`;
 }
@@ -467,37 +472,31 @@ function sideHeadHtml(s) {
   const lk = look(s);
   const ai = s.ai;
   const menu = [
-    `<button type="button" data-handoff="${esc(s.id)}">hand off from this chat</button>`,
-    canRun() ? `<button type="button" data-branch="${esc(s.id)}">start a branch here</button>` : '',
     aiOn() ? `<button type="button" data-summarize="${esc(s.id)}">summarise again</button>` : '',
+    aiOn() && !S.notes.some((x) => x.sessionId === s.id) ? `<button type="button" data-notes-for="${esc(s.id)}">write notes</button>` : '',
+    `<button type="button" data-copy-profile="${esc(s.id)}">copy a summary</button>`,
     `<button type="button" data-archive="${esc(s.id)}">hide from kroog</button>`,
   ].join('');
-  const openBtn = s.owner === 'kroog'
-    ? `<button type="button" class="btn sm" data-to-editor="${esc(s.id)}" ${kroogRunning(s) ? 'disabled title="Wait for it to finish, or stop it"' : ''}>open in ${esc(edName(s))}</button>`
-    : s.editor ? `<a class="btn sm" href="${esc(editorUrl(s))}">open in ${esc(edName(s))}</a>` : '';
-  return `<div class="row"><span class="w">${esc(lk.word)}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span></span>
-      <span class="head-acts">${openBtn}<details class="menu" ${UI.menuOpen ? 'open' : ''}><summary class="icon-btn" aria-label="More">⋯</summary><div class="menu-items">${menu}</div></details>
+  return `<div class="row"><span class="w">${s.live && lk.k !== 'working' ? '<i class="live-dot" title="open now"></i>' : ''}${esc(lk.word)}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span></span>
+      <span class="head-acts"><details class="menu" ${UI.menuOpen ? 'open' : ''}><summary class="icon-btn" aria-label="More">⋯</summary><div class="menu-items">${menu}</div></details>
       <button type="button" class="icon-btn" data-close aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>
     <h2>${esc(s.title || 'New chat')}</h2>
-    <div class="where">${whereLine(s)}<span>${esc(s.project)}</span>${(s.inputs || []).length ? `<span>${givenText(s)}</span>` : ''}</div>
+    <div class="where">${whereLine(s)}<span>${esc(s.project)}</span><span>${esc(spanText(s))}</span></div>
     ${ai && ai.gist ? `<div class="gistline"><span>${esc(ai.gist)}</span>${(ai.keywords || []).map((k) => `<i>${esc(k)}</i>`).join('')}</div>` : s.aiPending ? '<div class="gistline quiet">summarising<span class="dots"></span></div>' : ''}`;
+}
+
+// "started tuesday · 3 turns · 25 min"
+function spanText(s) {
+  const parts = [`started ${dayish(s.startedAt)}`];
+  const turns = Number(s.turns || 0) || (s.steps || []).filter((x) => x.kind === 'prompt').length;
+  if (turns) parts.push(plural(turns, 'turn'));
+  return parts.join(' · ');
 }
 
 function chatLink(id) {
   const s = S.sessions.get(id);
   if (!s) return 'an earlier chat';
-  return `<a class="linkish" href="#/lineage" data-open="${esc(id)}">${esc(trim(s.title || 'New chat', 40))}</a>`;
-}
-
-function givenText(s) {
-  const parts = [];
-  for (const input of (s.inputs || []).slice(-2)) {
-    const from = (input.from || []).filter((id) => id !== s.id);
-    const word = input.kind === 'memory' ? 'memory from' : input.kind === 'continue' ? 'branch of' : 'brief from';
-    if (from.length) parts.push(`${word} ${from.slice(0, 2).map(chatLink).join(', ')}`);
-    else if (input.kind === 'memory') parts.push('project memory');
-  }
-  return parts.join(' · ');
+  return `<a class="linkish" href="#/lineage" data-open="${esc(id)}">${esc(trim(s.title || 'New chat', 44))}</a>`;
 }
 
 // Small, safe markdown: code blocks, inline code, bold, paragraphs.
@@ -512,22 +511,128 @@ function md(text) {
   }).join('');
 }
 
+function cleanAsk(text) {
+  return clipText(String(text || '').replace(/\[Kroog brief [a-z0-9]+\]/i, '').trim(), 700);
+}
+
+// Steps grouped by what they did: "12 edits · 8 reads · 3 commands · 2 searches".
+function toolTally(s) {
+  const n = { edit: 0, read: 0, run: 0, search: 0, other: 0 };
+  for (const st of s.steps || []) {
+    if (st.kind !== 'tool' || st.helper) continue;
+    const t = String(st.tool || '');
+    if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t)) n.edit += 1;
+    else if (/^(Read|Glob|LS)$/.test(t)) n.read += 1;
+    else if (/^(Bash|Shell)$/.test(t)) n.run += 1;
+    else if (/^(Grep|WebSearch|WebFetch)$/.test(t)) n.search += 1;
+    else n.other += 1;
+  }
+  const bits = [];
+  if (n.edit) bits.push(plural(n.edit, 'edit'));
+  if (n.read) bits.push(plural(n.read, 'read'));
+  if (n.run) bits.push(plural(n.run, 'command'));
+  if (n.search) bits.push(plural(n.search, 'search', 'searches'));
+  if (n.other) bits.push(`${n.other} other`);
+  return bits.join(' · ');
+}
+
+function profileHtml(s) {
+  const n = s.needs || {};
+  let html = '';
+
+  // Needs you: what it wants, and an answer here if Kroog is holding the question.
+  if (s.status === 'needs' && n.kind === 'permission') {
+    html += `<div class="ask k-needs"><span class="kind">${n.helper ? `agent "${esc(n.helper)}" wants to` : 'it wants to'}</span>
+      <p class="what">${esc(lowerFirst(n.title || 'do something'))}</p>${n.detail ? `<pre>${esc(n.detail)}</pre>` : ''}
+      ${s.waitingPermission
+        ? `<div class="row"><button type="button" class="btn solid" data-allow="${esc(s.id)}">allow</button><button type="button" class="btn" data-deny-reason="${esc(s.id)}">deny</button><span class="count" data-tick="deadline" data-deadline="${n.deadline || ''}">${esc(countdownText(n.deadline))}</span></div>
+           <div class="field"><label for="deny-reason">Reason if you deny (optional)</label><input type="text" id="deny-reason" autocomplete="off"></div>`
+        : `<p class="why">${s.editor ? `${esc(edName(s))} is asking you.` : 'Answer it where the chat runs.'}</p>`}</div>`;
+  } else if (s.status === 'needs' && n.kind === 'question') {
+    html += `<div class="ask k-needs"><span class="kind">it asks</span><p class="what">${esc(n.title || 'Needs your answer')}</p><p class="why">Answer in ${esc(edName(s))}.</p></div>`;
+  } else if (s.status === 'error') {
+    html += `<div class="ask k-error"><span class="kind">it stopped</span><p class="what">${esc(n.title || 'An error')}</p></div>`;
+  }
+  if (s.status === 'working') html += `<p class="working-now"><i aria-hidden="true"></i>${esc(s.now || 'Working')}</p>`;
+
+  const sections = [];
+
+  // Asked: the goal, and the latest ask when it differs.
+  const prompts = (s.steps || []).filter((x) => x.kind === 'prompt').map((x) => x.text);
+  const first = prompts[0] || s.lastPrompt || '';
+  const last = prompts.length > 1 ? prompts[prompts.length - 1] : (s.lastPrompt || '');
+  if (first) {
+    let inner = `<p class="quote">${esc(cleanAsk(first))}</p>`;
+    if (last && cleanAsk(last) !== cleanAsk(first)) inner += `<p class="quote later"><span class="k">latest</span> ${esc(cleanAsk(last))}</p>`;
+    sections.push(['asked', inner]);
+  }
+
+  // Did: the plan, the files, the tools.
+  const did = [];
+  const plan = s.plan || [];
+  if (plan.length) did.push(`<ol class="plan">${plan.map((p) => `<li class="${esc(p.state)}">${esc(p.text)}<span class="sr"> (${p.state === 'done' ? 'done' : p.state === 'now' ? 'in progress' : 'not started'})</span></li>`).join('')}</ol>`);
+  const files = s.files || [];
+  if (files.length) did.push(`<div class="line"><span class="k">${plural(files.length, 'file')}</span> ${files.slice(-10).map((f) => `<code>${esc(shortFile(f, s.cwd))}</code>`).join(' ')}${files.length > 10 ? ` <span class="quiet">and ${files.length - 10} more</span>` : ''}</div>`);
+  const tally = toolTally(s);
+  if (tally) did.push(`<div class="line quiet">${esc(tally)}</div>`);
+  if (s.lastReply) did.push(`<p class="reply">${esc(clipText(s.lastReply, 900))}</p>`);
+  if (did.length) sections.push(['did', did.join('')]);
+
+  // Agents: the subagents it used, what each was asked and what it came back with.
+  const agents = Object.values(s.helpers || {});
+  if (agents.length) {
+    sections.push(['agents', `<ul class="agents">${agents.slice(-12).map((h) => `<li class="${h.state === 'working' ? 'on' : h.state === 'failed' ? 'bad' : ''}"><i aria-hidden="true"></i><span><b>${esc(String(h.type || 'agent').toLowerCase())}</b>${h.task ? ` <span class="task">${esc(h.task)}</span>` : ''}${h.state === 'working' ? ' <span class="k">working</span>' : ''}${h.result ? `<span class="res">${esc(h.result)}</span>` : ''}</span></li>`).join('')}</ul>`]);
+  }
+
+  // Learned: the notes the AI helper (or you) kept from this chat.
+  const notes = S.notes.filter((x) => x.sessionId === s.id);
+  if (notes.length) {
+    const order = ['Decision', 'Finding', 'How-to', 'Open question', 'Brief'];
+    const groups = order.map((t) => [t, notes.filter((x) => x.type === t)]).filter(([, xs]) => xs.length);
+    sections.push(['learned', groups.map(([t, xs]) => `<div class="line"><span class="k ${typeClass(t)}">${esc(t.toLowerCase())}${xs.length > 1 ? ` ${xs.length}` : ''}</span><ul class="notes">${xs.map((x) => `<li>${esc(x.text)}${x.remembered ? ' <span class="quiet">(in project memory)</span>' : ''}</li>`).join('')}</ul></div>`).join('')]);
+  } else if (aiOn() && (s.lastReply || '').length > 160) {
+    sections.push(['learned', `<p class="quiet">No notes yet. <button type="button" class="linkish" data-notes-for="${esc(s.id)}">write notes</button> picks out decisions, findings, how-tos and open questions.</p>`]);
+  }
+
+  // Came from, led to.
+  const from = [];
+  for (const input of [...(s.inputs || [])].reverse()) {
+    const ids = [...new Set([...(input.from || []), ...(input.notes || []).map((id) => (S.notes.find((x) => x.id === id) || {}).sessionId).filter(Boolean)])].filter((id) => id !== s.id);
+    const links = ids.map(chatLink).join(', ');
+    if (input.kind === 'memory') from.push(`<div class="line"><span class="k">memory</span> ${plural((input.notes || []).length, 'note')}${links ? ` from ${links}` : ''}</div>`);
+    else if (input.kind === 'continue') from.push(`<div class="line"><span class="k">branch of</span> ${links || 'an earlier chat'}</div>`);
+    else from.push(`<div class="line"><span class="k">brief</span> ${input.words ? `about ${plural(input.words, 'word')}` : ''}${links ? ` from ${links}` : ''}${input.t ? ` <span class="quiet">${esc(dayish(input.t))}</span>` : ''}</div>`);
+  }
+  if (from.length) sections.push(['came from', from.join('')]);
+  const ledTo = [...S.sessions.values()].filter((o) => o.id !== s.id && (o.inputs || []).some((i) => (i.from || []).includes(s.id)));
+  if (ledTo.length) sections.push(['led to', `<div class="line">${ledTo.map((o) => chatLink(o.id)).join(', ')}</div>`]);
+
+  html += `<dl class="readout">${sections.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
+
+  // The conversation itself, on request.
+  html += `<div class="convo-toggle"><button type="button" class="linkish" data-convo="${esc(s.id)}">${UI.showConvo ? 'hide the conversation' : 'read the conversation'}</button></div>`;
+  if (UI.showConvo) html += `<div class="convo">${conversationHtml(s)}</div>`;
+  return html;
+}
+
+function footHtml(s) {
+  const ed = edName(s);
+  const openBtn = `<button type="button" class="btn soft" data-open-editor="${esc(s.id)}">open in ${esc(ed)}</button>`;
+  return `<div class="row end">${openBtn}<button type="button" class="btn solid" data-handoff="${esc(s.id)}">new chat from this</button></div>`;
+}
+
 function toolsHtml(group, key) {
   const open = UI.openTools && UI.openTools.has(key);
   const shown = open || group.length <= 4 ? group : group.slice(-3);
   const hidden = group.length - shown.length;
-  return `<div class="tools-run">${hidden ? `<button type="button" class="linkish quiet more-steps" data-tools="${esc(key)}">${hidden} earlier step${hidden === 1 ? '' : 's'}</button>` : ''}${shown.map((x) => `<div class="tl st-${esc(x.state || 'ok')}"><i aria-hidden="true"></i><span>${x.helper ? `<span class="quiet">${esc(String(x.helper).toLowerCase())}:</span> ` : ''}${esc(x.text)}</span>${x.state === 'failed' ? '<b class="fail">failed</b>' : ''}</div>`).join('')}</div>`;
+  return `<div class="tools-run">${hidden ? `<button type="button" class="linkish quiet more-steps" data-tools="${esc(key)}">${hidden} earlier step${hidden === 1 ? '' : 's'}</button>` : ''}${shown.map((x) => `<div class="tl st-${esc(x.state || 'ok')}${x.helper ? ' ag' : ''}"><i aria-hidden="true"></i><span>${x.helper ? `<span class="quiet">${esc(String(x.helper).toLowerCase())}:</span> ` : ''}${esc(x.text)}</span>${x.state === 'failed' ? '<b class="fail">failed</b>' : ''}</div>`).join('')}</div>`;
 }
 
 function conversationHtml(s) {
   const tx = TX.get(s.id);
   const items = tx && tx.found ? tx.items : itemsFromSteps(s);
-  // Messages sent from Kroog stay "sent" until the chat shows them.
-  const box = OUTBOX.get(s.id) || [];
-  const pending = box.filter((o) => !items.some((x) => x.kind === 'you' && x.t >= o.t - 5000 && x.text.trim() === o.text.trim()));
-  OUTBOX.set(s.id, pending);
-  let html = tx && tx.more ? '<p class="quiet older">Older messages are in the chat in VS Code.</p>' : '';
-  if (!items.length && !pending.length) html += `<p class="quiet older">${tx && tx.loading ? 'loading the conversation' : 'Nothing in this chat yet.'}</p>`;
+  let html = tx && tx.more ? '<p class="quiet older">Older messages are in the chat in the editor.</p>' : '';
+  if (!items.length) html += `<p class="quiet older">${tx && tx.loading ? 'loading the conversation' : 'Nothing in this chat yet.'}</p>`;
   let group = [];
   let n = 0;
   const flush = () => { if (group.length) { html += toolsHtml(group, `${s.id}:${n}`); group = []; } };
@@ -540,151 +645,23 @@ function conversationHtml(s) {
     else html += `<p class="note${x.bad ? ' bad' : ''}">${esc(x.text)}</p>`;
   }
   flush();
-  for (const o of pending) html += `<div class="msg you pending"><div class="who">you <span class="quiet">${o.state === 'waiting' ? 'waiting for its current step' : 'sent, waiting for the chat'}</span></div><div class="txt">${md(o.text)}</div></div>`;
-
-  const n2 = s.needs || {};
-  if (s.status === 'needs' && n2.kind === 'permission') {
-    html += `<div class="ask k-needs"><span class="kind">${n2.helper ? `helper "${esc(n2.helper)}" wants to` : 'it wants to'}</span>
-      <p class="what">${esc(lowerFirst(n2.title || 'do something'))}</p>${n2.detail ? `<pre>${esc(n2.detail)}</pre>` : ''}
-      ${s.waitingPermission
-        ? `<div class="row"><button type="button" class="btn solid" data-allow="${esc(s.id)}">allow</button><button type="button" class="btn" data-deny-reason="${esc(s.id)}">deny</button><span class="count" data-tick="deadline" data-deadline="${n2.deadline || ''}">${esc(countdownText(n2.deadline))}</span></div>
-           <div class="field"><label for="deny-reason">Reason if you deny (optional)</label><input type="text" id="deny-reason" autocomplete="off"></div>`
-        : `<p class="why">${s.editor ? `${esc(edName(s))} is asking you.` : 'Answer it where the chat runs.'}</p>`}</div>`;
-  } else if (s.status === 'needs' && n2.kind === 'question') {
-    html += `<div class="ask k-needs"><span class="kind">it asks</span><p class="what">${esc(n2.title || 'Needs your answer')}</p></div>`;
-  } else if (s.status === 'error') {
-    html += `<div class="ask k-error"><span class="kind">it stopped</span><p class="what">${esc(n2.title || 'An error')}</p></div>`;
-  }
-  if (s.status === 'working') html += `<p class="working-now"><i aria-hidden="true"></i>${esc(s.now || 'Working')}</p>`;
   return html;
 }
 
-function renderConversation(s) {
-  const body = $('#side-body');
-  if (!s || !body || UI.selected !== s.id) return;
-  const atEnd = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
-  const scroll = body.scrollTop;
-  preserveFocus(() => { body.innerHTML = conversationHtml(s); });
-  body.scrollTop = atEnd || UI.scrollToEnd ? body.scrollHeight : scroll;
-  UI.scrollToEnd = false;
-}
-
-function sideBodyHtml(s) {
-  fetchTranscript(s);
-  return conversationHtml(s);
-}
-
-function composerHtml() {
-  return `<form class="composer" id="composer">
-    <label for="msg" class="sr">Message to this chat</label>
-    <textarea id="msg" rows="2" placeholder="Message this chat"></textarea>
-    <p class="hint" id="composer-hint"></p>
-    <div class="row end"><button type="button" class="btn sm warn" id="stop-btn" hidden>stop</button><button type="button" class="btn soft" id="alt-btn" hidden></button><button type="submit" class="btn solid" id="send-btn">send</button></div>
-  </form>`;
-}
-
-// Where a message goes, in plain words. Kroog never quietly makes a copy of a chat:
-// when it can't reach one, it says so and lets you pick.
-function composerMode(s) {
-  if (UI.branchFor === s.id) return 'branch';
-  if (s.holdingStop) return 'now';
-  if (s.inbox) return 'inbox';
-  const busy = s.status === 'working' || (s.status === 'needs' && s.needs && s.needs.kind === 'permission' && (s.waitingPermission || s.needs.kroog));
-  if (busy) return 'queue';
-  // Not open anywhere: Kroog carries the same chat on here, when Claude Code's registry of
-  // open chats is there to confirm it (or Kroog ran it / saw it close).
-  const registry = Boolean(S.info.claude && S.info.claude.registry);
-  if (canRun() && !s.live && (registry || s.owner === 'kroog' || s.status === 'ended')) return 'continue';
-  return s.editor ? 'unreachable' : 'later';
-}
-
-function updateComposer(s) {
-  const hint = $('#composer-hint');
-  if (!hint) return;
-  const send = $('#send-btn');
-  const alt = $('#alt-btn');
-  const stop = $('#stop-btn');
-  const msg = $('#msg');
-  const mode = composerMode(s);
-  const ed = edName(s);
-  const why = s.status === 'ended' ? 'It was closed' : `It isn't open in ${ed} right now, or it hasn't done anything since Kroog started`;
-  const texts = {
-    now: ['send', 'Goes in now. It was waiting for you.'],
-    inbox: ['send', `Goes straight into the chat${s.owner === 'kroog' ? '' : ` in ${ed}`}.`],
-    queue: ['send', 'It reads this after its current step.'],
-    continue: ['send', `Not open anywhere, so Kroog carries this chat on here. You can open it in ${ed} again afterwards.`],
-    branch: ['start branch', 'Starts a new chat here with everything this one knows, plus your message. This chat stays as it is.'],
-    unreachable: [`open in ${ed}`, `${why}, so Kroog can't reach it. Open it in ${ed} (your message is copied) and send it once there. After that, Kroog can message it.`],
-    later: ['send', 'It reads this with your next message where the chat runs.'],
-  };
-  send.textContent = texts[mode][0];
-  hint.textContent = texts[mode][1];
-  hint.classList.toggle('warn-hint', mode === 'unreachable');
-  alt.hidden = !(mode === 'unreachable' && canRun()) && mode !== 'branch';
-  alt.textContent = mode === 'branch' ? 'cancel' : 'start a branch here';
-  msg.placeholder = mode === 'branch' ? 'Message for the new branch' : 'Message this chat';
-  stop.hidden = !(s.status === 'working' || s.holdingStop || kroogRunning(s) || (s.status === 'needs' && s.waitingPermission));
-  stop.textContent = s.holdingStop ? 'let go' : 'stop';
-}
-
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
-}
-
-async function sendToEditor(s, text) {
-  const copied = text ? await copyText(text) : false;
-  openUrl(editorUrl(s));
-  toast(copied ? `Opening the chat in ${edName(s)}. Your message is copied: paste it there (Cmd+V) and press Enter.` : `Opening the chat in ${edName(s)}.`, 9000);
-  return true;
-}
-
-async function sendBranch(s, text) {
-  const r = await act(post(`sessions/${encodeURIComponent(s.id)}/send`, { text, mode: 'branch' }));
-  if (!r) return false;
-  UI.branchFor = null;
-  toast(`Started a branch here. The ${edName(s)} chat is unchanged.`, 7000);
-  UI.selected = r.id;
-  renderAll(false);
-  if (UI.route === 'lineage') setTimeout(() => reveal(r.id, true), 120);
-  return true;
-}
-
-function bindComposer() {
-  const form = $('#composer');
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const s = S.sessions.get(UI.selected);
-    const box = $('#msg');
-    const text = box.value.trim();
-    if (!s) return;
-    const mode = composerMode(s);
-    if (mode === 'unreachable') { if (await sendToEditor(s, text)) box.value = ''; return; }
-    if (!text) return;
-    if (mode === 'branch') { if (await sendBranch(s, text)) box.value = ''; return; }
-    const r = await act(post(`sessions/${encodeURIComponent(s.id)}/send`, { text }));
-    if (!r) return;
-    box.value = '';
-    if (r.delivered === 'editor' && r.url) { sendToEditor(s, text); return; }
-    const list = OUTBOX.get(s.id) || [];
-    list.push({ text, t: Date.now(), state: r.delivered === 'queued' ? 'waiting' : 'sent' });
-    OUTBOX.set(s.id, list);
-    UI.scrollToEnd = true;
-    renderConversation(s);
-  });
-  $('#msg').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); form.requestSubmit(); }
-  });
-  $('#alt-btn').addEventListener('click', async () => {
-    const s = S.sessions.get(UI.selected);
-    if (!s) return;
-    if (composerMode(s) === 'branch') { UI.branchFor = null; updateComposer(s); return; }
-    const box = $('#msg');
-    if (!box.value.trim()) { UI.branchFor = s.id; updateComposer(s); box.focus(); return; }
-    if (await sendBranch(s, box.value.trim())) box.value = '';
-  });
-  $('#stop-btn').addEventListener('click', () => {
-    act(post(`sessions/${encodeURIComponent(UI.selected)}/stop`), (r) => r.note || 'Done.');
-  });
+// A plain-text summary of a chat, for pasting anywhere.
+function profileText(s) {
+  const lines = [s.title || 'New chat', `${look(s).word} · ${s.project} · ${spanText(s)}`];
+  if (s.ai && s.ai.gist) lines.push('', s.ai.gist, (s.ai.keywords || []).join(', '));
+  const prompts = (s.steps || []).filter((x) => x.kind === 'prompt').map((x) => x.text);
+  if (prompts[0] || s.lastPrompt) lines.push('', 'Asked:', cleanAsk(prompts[0] || s.lastPrompt));
+  if ((s.plan || []).length) lines.push('', 'Plan:', ...s.plan.map((p) => `- [${p.state === 'done' ? 'done' : p.state === 'now' ? 'in progress' : 'to do'}] ${p.text}`));
+  if ((s.files || []).length) lines.push('', 'Files:', ...s.files.slice(-20).map((f) => `- ${shortFile(f, s.cwd)}`));
+  const agents = Object.values(s.helpers || {});
+  if (agents.length) lines.push('', 'Agents:', ...agents.map((h) => `- ${h.type}${h.task ? `: ${h.task}` : ''}${h.result ? ` → ${h.result}` : ''}`));
+  const notes = S.notes.filter((x) => x.sessionId === s.id);
+  if (notes.length) lines.push('', 'Notes:', ...notes.map((x) => `- ${x.type}: ${x.text}`));
+  if (s.lastReply) lines.push('', 'Last reply:', clipText(s.lastReply, 1500));
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------- handoff (drawn on the canvas)
@@ -704,6 +681,20 @@ function toggleSource(id) {
   renderAll(false);
 }
 
+// A new chat from several chats at once (a suggested group). The lineage shows the draft
+// brief wired to them, and the panel is ready to send.
+function startHandoffFrom(ids, cwd = '') {
+  const h = UI.handoff;
+  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: 'new', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: '', memoryCwd: '', short: false, run: h.run || 'typed', newCwd: cwd, aiText: null, aiBusy: false, extra: [] };
+  for (const id of ids) addSource(id);
+  UI.selected = null;
+  UI.newChat = null;
+  UI.linking = null;
+  hideHover();
+  if (UI.route !== 'lineage') location.hash = '#/lineage';
+  else renderAll(false);
+}
+
 function startHandoff(fromId) {
   const h = UI.handoff;
   h.active = true;
@@ -715,13 +706,13 @@ function startHandoff(fromId) {
 }
 
 function endHandoff() {
-  UI.handoff = { active: false, sources: [], notes: [], goal: '', target: 'new', editor: UI.handoff.editor, runTarget: '', memoryCwd: '', short: false, run: UI.handoff.run || 'editor', newCwd: '', aiText: null, aiBusy: false, extra: [] };
+  UI.handoff = { active: false, sources: [], notes: [], goal: '', target: 'new', editor: UI.handoff.editor, runTarget: '', memoryCwd: '', short: false, run: UI.handoff.run || 'typed', newCwd: '', aiText: null, aiBusy: false, extra: [] };
   renderAll(false);
 }
 
 function composeBrief() {
   const h = UI.handoff;
-  const lines = ['Brief from Kroog: notes from earlier chats on related work. Use them as background and ask if anything is unclear.'];
+  const lines = ['Context from Kroog, the map of my Claude Code chats: what earlier chats on this work established. Treat it as the starting point for this chat, and ask if anything is unclear.'];
   if (h.target === 'new' && h.goal.trim()) lines.push('', `Goal: ${h.goal.trim()}`);
   for (const src of h.sources) {
     const s = S.sessions.get(src.id);
@@ -774,7 +765,10 @@ function briefPanelHtml() {
   }
   const editor = h.editor || 'vscode';
   const count = h.sources.length + h.notes.length + (h.extra || []).length;
-  const inKroog = canRun() && h.run === 'kroog' && h.target !== 'memory';
+  // How the new chat starts: 'typed' = the editor opens with the context typed in, you press
+  // Enter; 'seed' = Kroog runs the first turn (Claude reads the context and replies), then the
+  // editor opens on it.
+  const how = h.run === 'seed' && canRun() ? 'seed' : 'typed';
   if (!h.newCwd || !folders.includes(h.newCwd)) h.newCwd = h.memoryCwd || folders[0] || '';
 
   const srcHtml = h.sources.map((src) => {
@@ -800,36 +794,33 @@ function briefPanelHtml() {
 
   const radio = (key, label, hint) => `<label class="${h.target === key ? 'on' : ''}"><input type="radio" name="dest" value="${key}" ${h.target === key ? 'checked' : ''}><span>${label}<span>${hint}</span></span></label>`;
   let destFields = '';
-  const runSeg = canRun() && h.target !== 'memory'
-    ? `<div class="field"><span class="label">Carry on</span><div class="seg" role="group" aria-label="Where you carry on"><button type="button" data-run="editor" aria-pressed="${h.run !== 'kroog'}">in ${esc(EDITORS[editor] || 'VS Code')}</button><button type="button" data-run="kroog" aria-pressed="${h.run === 'kroog'}">here in kroog only</button></div></div>`
-    : '';
   if (h.target === 'new') {
+    const edLabel = EDITORS[editor] || 'VS Code';
+    const howSeg = canRun()
+      ? `<div class="field"><span class="label">How it starts</span><div class="seg" role="group" aria-label="How the new chat starts"><button type="button" data-run="typed" aria-pressed="${how === 'typed'}">context typed in, you press Enter</button><button type="button" data-run="seed" aria-pressed="${how === 'seed'}">Claude reads it first</button></div></div>`
+      : '';
     destFields = `<div class="field"><label for="ho-goal">Goal for the new chat</label><textarea id="ho-goal" rows="3" placeholder="For example: write the post on dbt tests and cost gates">${esc(h.goal)}</textarea></div>
-      ${runSeg}
-      ${canRun()
-        ? `<div class="field"><label for="ho-newcwd">In project folder</label><select id="ho-newcwd">${folders.map((f) => `<option value="${esc(f)}" ${f === h.newCwd ? 'selected' : ''}>${esc(folderName(f))}</option>`).join('')}</select></div>
-           <p class="quiet">${inKroog ? 'It runs here in Kroog only. You can open it in your editor later.' : `Kroog starts the chat in that folder with the brief (it answers with a short plan), then opens the folder and the chat in ${esc(EDITORS[editor] || 'VS Code')}, where you carry on. Kroog keeps showing it too.`}</p>`
-        : `<div class="field"><label for="ho-editor">Open it in</label><select id="ho-editor">${Object.entries(EDITORS).map(([k, v]) => `<option value="${k}" ${k === editor ? 'selected' : ''}>${v}</option>`).join('')}</select></div>`}`;
+      <div class="field"><label for="ho-newcwd">In project folder</label><select id="ho-newcwd">${folders.map((f) => `<option value="${esc(f)}" ${f === h.newCwd ? 'selected' : ''}>${esc(folderName(f))}</option>`).join('')}</select></div>
+      <div class="field"><label for="ho-editor">Open it in</label><select id="ho-editor">${Object.entries(EDITORS).map(([k, v]) => `<option value="${k}" ${k === editor ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      ${howSeg}
+      <p class="quiet">${how === 'seed'
+        ? `Kroog starts the chat in that folder with the context as its first message. Claude reads it and replies with what it understood, then ${esc(edLabel)} opens on the chat and you carry on there.`
+        : `${esc(edLabel)} opens on that folder with a new chat and the context typed in as its first message. Press Enter there to begin. Nothing runs before that.`}</p>`;
   } else if (h.target === 'running') {
     const t = S.sessions.get(h.runTarget);
     let note = '';
-    if (t && t.inbox) note = `It goes straight into the chat${t.owner === 'kroog' ? '' : `, which is open in ${esc(edName(t))}`}.`;
-    else if (t && inKroog) {
-      const live2 = t.status === 'working' || t.holdingStop || (t.status === 'needs' && t.needs && t.needs.kind === 'permission');
-      if (live2) note = 'It is working, so it reads the brief after its current step.';
-      else if (t.owner === 'kroog' || t.status === 'ended') note = 'Kroog runs its next turn here with the brief.';
-      else note = `It is waiting in ${esc(edName(t))}, so Kroog starts a branch of it here with the brief. The ${esc(edName(t))} chat stays as it is.`;
-    }
+    if (t && t.inbox) note = `It goes straight into the chat, which is open in ${esc(edName(t))}.`;
+    else if (t) note = `It is not open right now. Kroog opens it in ${esc(edName(t))} with a line to paste.`;
     destFields = live.length
-      ? `<div class="field"><label for="ho-run">Which chat</label><select id="ho-run">${live.map((s) => `<option value="${esc(s.id)}" ${s.id === h.runTarget ? 'selected' : ''}>${esc(trim(s.title || 'New chat', 56))} (${esc(look(s).word)})</option>`).join('')}</select></div>${t && t.inbox ? '' : runSeg}${note ? `<p class="quiet">${note}</p>` : ''}`
-      : '<p class="quiet">No open chats to send to.</p>';
+      ? `<div class="field"><label for="ho-run">Which chat</label><select id="ho-run">${live.map((s) => `<option value="${esc(s.id)}" ${s.id === h.runTarget ? 'selected' : ''}>${esc(trim(s.title || 'New chat', 56))} (${esc(look(s).word)})</option>`).join('')}</select></div>${note ? `<p class="quiet">${note}</p>` : ''}`
+      : '<p class="quiet">No chats to send to.</p>';
   } else {
     destFields = folders.length
       ? `<div class="field"><label for="ho-mem">Project folder</label><select id="ho-mem">${folders.map((f) => `<option value="${esc(f)}" ${f === h.memoryCwd ? 'selected' : ''}>${esc(folderName(f))}</option>`).join('')}</select></div>`
       : '<p class="quiet">No project folders yet.</p>';
   }
-  const sendLabel = h.target === 'new' ? (inKroog ? 'start it in kroog' : `start it, then open in ${EDITORS[editor]}`) : h.target === 'running' ? 'send the brief' : 'add to project memory';
-  const disabled = !count || h.aiBusy || (h.target === 'running' && !live.length) || (h.target === 'memory' && !folders.length) || (h.target === 'new' && canRun() && !h.newCwd);
+  const sendLabel = h.target === 'new' ? `open a new chat in ${EDITORS[editor] || 'VS Code'}` : h.target === 'running' ? 'send the brief' : 'add to project memory';
+  const disabled = !count || h.aiBusy || (h.target === 'running' && !live.length) || (h.target === 'memory' && !folders.length) || (h.target === 'new' && !h.newCwd);
   const aiRow = aiOn()
     ? `<div class="row ai-row"><button type="button" class="btn sm soft" id="ho-ai" ${h.aiBusy || !count ? 'disabled' : ''}>${h.aiBusy ? 'writing' : h.aiText != null ? 'write it again' : 'write it with ai'}</button>${h.aiText != null ? '<button type="button" class="linkish quiet" id="ho-ai-reset">use the plain version</button>' : '<span class="quiet">merges the chats into one short brief</span>'}</div>`
     : '';
@@ -842,7 +833,7 @@ function briefPanelHtml() {
       <div class="where"><span>Click chats on the canvas to add or remove them.</span></div></div>
     <div class="side-body">
       <div>${srcHtml + noteHtml + extraHtml || '<p class="quiet">Nothing in the brief yet. Click a chat on the canvas, or use a note from the library.</p>'}</div>
-      <div class="field"><span class="label">Send it to</span><div class="dest">${radio('new', 'a new chat', 'starts fresh with the brief')}${radio('running', 'a running chat', 'adds the brief to its work')}${radio('memory', 'project memory', 'every new chat in that folder starts with it')}</div></div>
+      <div class="field"><span class="label">Send it to</span><div class="dest">${radio('new', 'a new chat', 'opens in your editor with the context as its first message')}${radio('running', 'an existing chat', 'the context goes into that chat')}${radio('memory', 'project memory', 'every new chat in that folder starts with it')}</div></div>
       ${destFields}
       ${h.aiText != null ? '' : `<label class="check"><input type="checkbox" id="ho-short" ${h.short ? 'checked' : ''}><span>keep it short</span></label>`}
       ${aiRow}
@@ -854,7 +845,7 @@ function briefPanelHtml() {
 async function sendHandoff() {
   const h = UI.handoff;
   const text = briefText();
-  const inKroog = canRun() && h.run === 'kroog' && h.target !== 'memory';
+  const how = h.run === 'seed' && canRun() ? 'seed' : 'typed';
   const r = await act(post('handoff', {
     text,
     goal: h.goal,
@@ -864,7 +855,7 @@ async function sendHandoff() {
     cwd: h.target === 'new' ? h.newCwd : h.memoryCwd,
     sources: h.sources.map((x) => x.id),
     notes: h.notes,
-    run: inKroog ? 'kroog' : 'editor',
+    run: h.target === 'new' ? (how === 'seed' ? 'editor' : 'typed') : 'editor',
   }));
   if (!r) return;
   const target = S.sessions.get(h.runTarget);
@@ -873,9 +864,16 @@ async function sendHandoff() {
     endHandoff();
     return;
   }
+  if (r.delivered === 'typed') {
+    const ed = h.editor || 'vscode';
+    await openInEditor({ editor: ed, cwd: r.cwd || h.newCwd, prompt: r.prompt });
+    toast(`Opening ${EDITORS[ed] || 'VS Code'} with a new chat and the context typed in. Press Enter there to begin.`, 8000);
+    endHandoff();
+    return;
+  }
   if (r.delivered === 'kroog') {
     const ed = EDITORS[h.editor] || 'VS Code';
-    toast(!inKroog && (r.mode === 'new' || r.mode === 'resume') ? `Starting it with the brief. It opens in ${ed} in a few seconds.` : r.mode === 'fork' ? 'Started a branch of that chat here in Kroog, with the brief.' : r.mode === 'new' ? 'Started the new chat here in Kroog, with the brief.' : 'Sent. It runs here in Kroog.', 8000);
+    toast(r.mode === 'new' || r.mode === 'resume' ? `Claude is reading the context. The chat opens in ${ed} in a few seconds.` : 'Sent.', 8000);
     endHandoff();
     UI.selected = r.id;
     renderAll(false);
@@ -884,14 +882,14 @@ async function sendHandoff() {
   }
   if (r.delivered === 'editor' && r.url) {
     openUrl(r.url);
-    toast(h.target === 'new' ? `Opening ${EDITORS[h.editor] || 'VS Code'}. Press Enter in the new chat and the brief goes with it.` : `Opening ${target ? edName(target) : 'the editor'}. Press Enter there and the brief goes in.`, 8000);
+    toast(`Opening ${target ? edName(target) : 'the editor'}. Press Enter there and the brief goes in.`, 8000);
   } else if (r.delivered === 'now') toast('Sent. It carries on now.');
   else if (r.delivered === 'queued') toast('Sent. It reads the brief after its current step.');
   else if (r.delivered === 'memory') toast('Added to project memory. New chats in that folder start with it.');
   else if (r.delivered === 'paste' && r.url) {
     try { await navigator.clipboard.writeText(r.prompt); } catch { /* ignore */ }
-    openUrl(r.url);
-    toast(`Kroog can't reach that chat right now, so it opened it in ${target ? edName(target) : 'the editor'}. A short line with the brief is copied: paste it there (Cmd+V) and press Enter.`, 10000);
+    if (target) await openInEditor({ editor: target.editor || undefined, cwd: target.cwd, session: target.id }); else openUrl(r.url);
+    toast(`That chat is not open right now, so Kroog opened it in ${target ? edName(target) : 'the editor'}. A short line with the brief is copied: paste it there (Cmd+V) and press Enter.`, 10000);
   } else if (r.delivered === 'copy') {
     try { await navigator.clipboard.writeText(r.prompt); } catch { /* ignore */ }
     toast('Copied. Paste it into that chat and the brief goes with it.', 8000);
@@ -902,6 +900,11 @@ async function sendHandoff() {
 // ---------------------------------------------------------------- list
 
 function renderList() {
+  // Ask for fresh suggestions when the list opens (the server caches them).
+  if (!UI.groupsAsked || Date.now() - UI.groupsAsked > 60000) {
+    UI.groupsAsked = Date.now();
+    post('groups', {}).then(() => renderAll(false)).catch(() => {});
+  }
   const q = UI.list.query.trim().toLowerCase();
   const all = visibleSessions(S).filter((s) => !q || `${s.title} ${s.project} ${s.now} ${s.lastPrompt} ${s.place}`.toLowerCase().includes(q));
   const counts = { all: all.length, needs: 0, working: 0, open: 0, done: 0 };
@@ -918,11 +921,35 @@ function renderList() {
   const hidden = hiddenByScope(S);
   const pills = [['all', 'all'], ...defs].map(([key, label]) => `<button type="button" class="pill" data-filter="${key}" aria-pressed="${UI.list.filter === key}">${label} <span class="n">${counts[key]}</span></button>`).join('');
   $('#view').innerHTML = `${demoLine()}<div class="page">
+    ${groupsHtml()}
     <header class="page-head"><div><h1>Every chat</h1><p class="lead">${esc(statusSentence())}${hidden ? ` ${plural(hidden, 'chat')} outside your editors hidden.` : ''}</p></div>
       <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><label for="q" class="sr">Find a chat</label><input id="q" type="search" placeholder="find a chat" value="${esc(UI.list.query)}" autocomplete="off"></div></header>
     <div class="tools" role="group" aria-label="Show">${pills}${S.info.mode === 'demo' ? '' : '<button type="button" class="btn sm soft" id="do-import" style="margin-left:auto">import recent chats</button>'}</div>
     ${sections || `<div class="empty"><p>${q ? `No chats match "${esc(UI.list.query.trim())}".` : 'No chats here yet. Chats you used before linking can be imported with the button above.'}</p></div>`}
   </div>`;
+}
+
+// Suggested groups: chats about the same work, with one button to start a chat from them.
+function groupsHtml() {
+  const dismissed = new Set((store.get('kroog-groups-dismissed', '') || '').split(',').filter(Boolean));
+  const groups = (S.groups || []).filter((g) => !dismissed.has(g.id) && g.chats.filter((id) => S.sessions.has(id)).length >= 2);
+  const st = S.info.groups || {};
+  const by = st.by === 'ai' ? 'grouped by the AI helper' : st.by === 'words' ? 'grouped by shared words' : '';
+  const cards = groups.slice(0, 6).map((g) => {
+    const members = g.chats.map((id) => S.sessions.get(id)).filter(Boolean);
+    return `<div class="group">
+      <div class="g-head"><b>${esc(g.name)}</b><span class="quiet">${esc(g.why)}</span></div>
+      <ul class="g-chats">${members.map((s) => `<li><button type="button" class="linkish" data-open="${esc(s.id)}">${esc(trim(s.title || 'New chat', 60))}</button><span class="quiet">${esc(s.project)} · ${esc(look(s).word)} · ${esc(dayish(s.lastAt))}</span></li>`).join('')}</ul>
+      <div class="g-acts"><button type="button" class="btn sm solid" data-group-new="${esc(g.id)}">new chat from these ${members.length}</button><button type="button" class="linkish quiet" data-group-dismiss="${esc(g.id)}">not related</button></div>
+    </div>`;
+  }).join('');
+  const head = `<div class="section-head"><h2>chats about the same work</h2><span class="n">${groups.length}</span><span class="quiet g-by">${esc(by)}</span><button type="button" class="linkish quiet" id="groups-again" ${st.busy ? 'disabled' : ''}>${st.busy ? 'looking' : 'look again'}</button></div>`;
+  if (!groups.length) {
+    if (st.busy) return `${head}<p class="quiet g-empty">Looking for chats that belong together<span class="dots"></span></p>`;
+    if (!st.at) return '';
+    return `${head}<p class="quiet g-empty">No two chats look like the same work right now.${aiOn() ? '' : ' Turn on the AI helper in setup for better grouping.'}</p>`;
+  }
+  return `${head}<div class="groups">${cards}</div>`;
 }
 
 function rowHtml(s) {
@@ -1064,14 +1091,14 @@ function renderSetup() {
         <ul class="events">${events.map((e) => `<li class="${lastEvents[e] ? 'yes' : ''}">${e}<span>${lastEvents[e] ? (dur(lastEvents[e]) === 'just now' ? 'just now' : `${dur(lastEvents[e])} ago`) : 'not yet'}</span></li>`).join('')}</ul>
       </div></section>
 
-      <section class="set"><h2>Running chats here ${claudeState}</h2><div class="body">
-        <p>Kroog can run Claude Code chats itself: new chats, a brief handed to a chat, or the next turn of a chat. It uses Claude Code on this Mac with your usual login, settings and plan, so these chats are in VS Code's session history too and you can carry them on there.</p>
+      <section class="set"><h2>Claude Code on this Mac ${claudeState}</h2><div class="body">
+        <p>Kroog uses Claude Code itself for two things: the AI helper (summaries, notes, merged briefs, with Haiku on your plan) and, when you ask, starting a new chat with the context already read, which then opens in your editor. Chats are always yours to carry on in VS Code or Cursor.</p>
         ${demo ? '<p class="quiet">In the demo, runs are pretend.</p>' : cl.found
           ? `<p class="quiet">Using <code>${esc(tildePath(cl.path))}</code>${cl.from === 'vscode' || cl.from === 'cursor' ? ` (the copy inside ${cl.from === 'cursor' ? 'Cursor' : 'VS Code'})` : ''}, version ${esc(cl.version || '')}.</p>`
           : '<p>Kroog could not find Claude Code. Install it for the Terminal (see code.claude.com), or paste the path to it below.</p>'}
         ${demo ? '' : `<form class="keyrow" id="claude-form" autocomplete="off"><label for="set-claude" class="sr">Path to Claude Code</label><input type="text" id="set-claude" placeholder="found on its own; or paste a path, like ~/.local/bin/claude" value="${esc(st.claudePath || '')}" autocomplete="off"><button type="submit" class="btn soft">check</button></form>`}
-        <div class="field"><label for="set-kroogperm">Chats Kroog runs</label><select id="set-kroogperm"><option value="default" ${st.kroogPermissionMode !== 'acceptEdits' ? 'selected' : ''}>ask me here before edits and commands</option><option value="acceptEdits" ${st.kroogPermissionMode === 'acceptEdits' ? 'selected' : ''}>edit files without asking; ask before commands</option></select></div>
-        <p class="quiet">Kroog answers its own chats' questions only while a Kroog tab is open. With no tab open, anything that needs your yes is not allowed.</p>
+        <div class="field"><label for="set-kroogperm">When Kroog starts a chat for you</label><select id="set-kroogperm"><option value="default" ${st.kroogPermissionMode !== 'acceptEdits' ? 'selected' : ''}>ask me here before edits and commands</option><option value="acceptEdits" ${st.kroogPermissionMode === 'acceptEdits' ? 'selected' : ''}>edit files without asking; ask before commands</option></select></div>
+        <p class="quiet">That first turn can ask to read or edit files. Kroog shows the question only while a Kroog tab is open; with no tab open, it is not allowed.</p>
       </div></section>
 
       <section class="set"><h2>AI helper ${aiState}</h2><div class="body">
@@ -1195,8 +1222,34 @@ document.addEventListener('click', async (e) => {
   if (d.allow) { e.stopPropagation(); act(post(`sessions/${encodeURIComponent(d.allow)}/decide`, { behavior: 'allow' }), 'Allowed. It carries on.'); return; }
   if (d.deny) { e.stopPropagation(); act(post(`sessions/${encodeURIComponent(d.deny)}/decide`, { behavior: 'deny' }), 'Denied. It will try another way or ask you.'); return; }
   if (t.closest('.menu-items')) { UI.menuOpen = false; const m = t.closest('details.menu'); if (m) m.open = false; }
-  if (d.branch) { UI.branchFor = d.branch; const s0 = S.sessions.get(d.branch); if (s0) updateComposer(s0); const m = $('#msg'); if (m) m.focus(); return; }
-  if (d.tools) { UI.openTools = UI.openTools || new Set(); UI.openTools.add(d.tools); renderConversation(S.sessions.get(UI.selected)); return; }
+  if (d.tools) { UI.openTools = UI.openTools || new Set(); UI.openTools.add(d.tools); renderAll(false); return; }
+  if (d.convo) { UI.showConvo = !UI.showConvo; renderAll(false); return; }
+  if (d.groupNew) {
+    const g = (S.groups || []).find((x) => x.id === d.groupNew);
+    if (g) startHandoffFrom(g.chats.filter((id) => S.sessions.has(id)), g.cwd || '');
+    return;
+  }
+  if (d.groupDismiss) {
+    const list = (store.get('kroog-groups-dismissed', '') || '').split(',').filter(Boolean);
+    if (!list.includes(d.groupDismiss)) list.push(d.groupDismiss);
+    store.set('kroog-groups-dismissed', list.slice(-50).join(','));
+    renderAll(false);
+    return;
+  }
+  if (d.openEditor) {
+    const s = S.sessions.get(d.openEditor);
+    if (!s) return;
+    await openInEditor({ editor: s.editor || undefined, cwd: s.cwd, session: s.id });
+    toast(`Opening it in ${edName(s)}.`, 4000);
+    return;
+  }
+  if (d.copyProfile) {
+    const s = S.sessions.get(d.copyProfile);
+    if (!s) return;
+    try { await navigator.clipboard.writeText(profileText(s)); toast('Summary copied.'); } catch { toast('Copy failed.'); }
+    return;
+  }
+  if (d.notesFor) { await act(post('notes-for', { id: d.notesFor }), (r) => r.message || 'Writing notes.'); return; }
   if (d.link) { e.preventDefault(); e.stopPropagation(); toggleLink(d.link); return; }
   if (d.linkCancel !== undefined) { UI.linking = null; renderAll(false); return; }
   if (d.open) { e.preventDefault(); select(d.open); return; }
@@ -1229,12 +1282,6 @@ document.addEventListener('click', async (e) => {
   if (d.newchatCancel !== undefined) { UI.newChat = null; renderAll(false); return; }
   if (d.run) { UI.handoff.run = d.run; renderAll(false); return; }
   if (d.summarize) { wantSummary(S.sessions.get(d.summarize), true); return; }
-  if (d.toEditor) {
-    const s = S.sessions.get(d.toEditor);
-    const r = await act(post('to-editor', { id: d.toEditor }));
-    if (r && r.url) { openUrl(r.url); toast(`Opening it in ${s ? edName(s) : 'the editor'}. It must be the same project folder that the editor has open. From now on, a message from Kroog starts a branch.`, 9000); }
-    return;
-  }
   if (d.unextra !== undefined) { UI.handoff.extra.splice(Number(d.unextra), 1); UI.handoff.aiText = null; renderAll(false); return; }
   if (d.unsource) { UI.handoff.aiText = null; UI.handoff.sources = UI.handoff.sources.filter((x) => x.id !== d.unsource); renderAll(false); return; }
   if (d.unnote) { UI.handoff.notes = UI.handoff.notes.filter((x) => x !== d.unnote); renderAll(false); return; }
@@ -1264,17 +1311,17 @@ document.addEventListener('click', async (e) => {
     case 'ho-send': sendHandoff(); break;
     case 'ho-ai': writeBriefWithAi(); break;
     case 'ho-ai-reset': UI.handoff.aiText = null; renderAll(false); break;
-    case 'nc-start': startNewChat(); break;
     case 'nc-editor': {
-      const text = ($('#nc-text') || {}).value || '';
+      const text = (($('#nc-text') || {}).value || '').trim();
       const ed = S.settings.defaultEditor || 'vscode';
-      openUrl(`${ed}://anthropic.claude-code/open${text.trim() ? `?prompt=${encodeURIComponent(text.trim())}` : ''}`);
-      toast(`Opening a new chat in ${EDITORS[ed] || 'VS Code'}. It starts in the folder the editor has open, so open ${folderName(UI.newChat.cwd)} there first.`, 9000);
+      await openInEditor({ editor: ed, cwd: UI.newChat.cwd, prompt: text });
+      toast(`Opening ${EDITORS[ed] || 'VS Code'} on ${folderName(UI.newChat.cwd)} with a new chat${text ? ', your message typed in' : ''}.`, 6000);
       UI.newChat = null;
       renderAll(false);
       break;
     }
     case 'claude-check': await act(post('claude-check'), (r) => r.message); break;
+    case 'groups-again': t.disabled = true; t.textContent = 'looking'; await act(post('groups', { force: true })); renderAll(false); break;
     case 'ho-copy':
       try { await navigator.clipboard.writeText(briefText()); toast('Brief copied. Paste it into any chat.'); } catch { toast('Copy failed. Open the preview and copy the text instead.'); }
       break;

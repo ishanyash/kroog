@@ -1,11 +1,11 @@
 # Kroog
 
-Kroog is one browser tab for all your Claude Code chats: in VS Code, Cursor or the Terminal.
+Kroog is the map of your Claude Code chats. One browser tab shows every chat in VS Code, Cursor or the Terminal: what each one is about, what it did, which agents it used, and how the chats came from each other. Chats stay in Claude Code; Kroog is where you understand them and where you start the next one with the right context.
 
-- **See what every chat is doing.** One week at a time, project by project. Hover over a chat for a one-line summary.
-- **Talk to them from one place.** Open a chat to read its real conversation, as Claude Code shows it. Type a message and it goes straight into that chat in VS Code, even if the chat is idle. You can also allow or deny what a chat wants to do.
-- **Connect chats.** Use the link key to merge what one or more chats worked out into another chat. It can also start a new chat, which then opens in VS Code.
-- **A second brain.** Your `CLAUDE.md` files, rules, skills and Claude Code's own memory become searchable, in Kroog and from inside every Claude Code chat.
+- **See.** One week at a time, project by project. Four states: working, needs you, open, done. Hover over a chat for a one-line summary.
+- **Understand.** Open a chat for its profile: what was asked, what got done, the files, the agents and what they came back with, the notes it left, where it came from. The full conversation is one click away.
+- **Connect.** Pick two or three chats with the link key and open a new Claude Code chat whose first message is the context they established.
+- **Remember.** A second brain: your `CLAUDE.md` files, rules, skills and Claude Code's own memory, as a map and a search, usable from inside every Claude Code chat.
 
 It runs only on your Mac, with no editor plugin. Kroog was called Crew while it was a draft.
 
@@ -56,27 +56,35 @@ Every chat is in one of four states:
 
 Kroog reads Claude Code's own registry of open chats, so it knows which chats are open from the moment it starts. Chats with no messages in them (panels that were opened and closed) are hidden.
 
-### A chat
+### A chat's profile
 
-Click a chat to open its panel.
-- **At the top:** its title, where it is ("open in VS Code", or "not open now"), its project, and a one-line summary.
-- **In the middle:** the real conversation, read from Claude Code's own history: your messages, Claude's replies, and each step on one line. When it asks to edit a file or run a command, allow and deny show up here.
-- **At the bottom:** the message box. Under it, Kroog says where your message goes:
-  - **open chat:** straight in. If it's working, it reads your message after its current step; if it's idle, it starts on it right away, in VS Code. Your message shows as "sent" until the chat has it.
-  - **done chat:** Kroog carries the same chat on, one turn at a time, with Claude Code on your Mac. VS Code can open it again afterwards. Permission questions show up in the panel.
-- **open in VS Code:** always there, at the top. For an open chat it switches to its tab; for a done chat it resumes it there.
-- **More (⋯):** hand off from this chat, start a branch here, summarise again, hide.
+Click a chat to open its profile. Kroog shows, it doesn't chat: talking to the chat happens in your editor.
+- **At the top:** its state, where it is ("open in VS Code", or "not open now"), its project, when it started and how many turns, and a one-line summary with keywords.
+- **asked:** what you asked for, and the latest ask if it changed.
+- **did:** its plan with what's done, the files it changed, how many edits, reads and commands, and its last reply.
+- **agents:** the agents it started, what each was asked and what it came back with. On the week view, agents are the small circles under a chat, and their steps are the hollow squares.
+- **learned:** the notes Kroog kept from it (decisions, findings, how-tos, open questions). If there are none, **write notes** makes them.
+- **came from / led to:** the chats it was built from, and the chats built from it.
+- **read the conversation:** the real conversation, from Claude Code's own history, when you want it.
+- **At the bottom:** **open in VS Code**, and **new chat from this**.
+- **More (⋯):** summarise again, write notes, copy a summary, hide.
 
-In VS Code, a message from Kroog arrives as a message from another session. That's how Claude Code labels these messages, so a message from Kroog can never approve anything for you.
+When a chat asks to edit a file or run a command, the question shows at the top of its profile. Answer it in your editor, or here if Kroog is holding it.
 
-### Connect chats (link key)
+### Start a new chat from what others worked out
 
-1. Click the small link key on a chat. Add more chats with their keys.
-2. Click the chat that should receive them, or **+ new chat** in a project.
+1. Click the small link key on a chat. Add more chats with their keys. (Or press **new chat from this** in a profile.)
+2. Click **+ new chat** in the project it belongs to. Or click an existing chat to send the context into it.
 3. Choose what to carry over (last reply, plan, files, notes), or press **write it with ai** for one merged brief you can edit.
-4. Send it.
-   - **To a live chat:** the brief goes straight in.
-   - **To a new chat:** Kroog starts it in the project folder with the brief. It answers with a short plan, then opens in VS Code, where you carry on. Kroog keeps showing it.
+4. Press **open a new chat in VS Code**. VS Code opens on that project with a new Claude Code chat, and the context is typed in as its first message: "Context from Kroog… what earlier chats on this work established…". Press Enter there to begin. Kroog draws the lines from the old chats to the new one.
+
+If you'd rather arrive to a chat that has already read the context, pick **Claude reads it first**: Kroog starts the chat with the context and Claude replies with what it understood, then VS Code opens on it.
+
+**+ new chat** on a project band opens a plain new chat in VS Code on that folder, with an optional first message.
+
+### Chats about the same work
+
+The **list** page starts with suggested groups: chats that look like the same piece of work, with a name and a reason. With the AI helper on, Haiku (on your plan) proposes and names the groups; without it, Kroog groups by shared words. Press **new chat from these N** and Kroog jumps to the lineage with those chats picked and the draft brief wired to them; the panel is ready to open the new chat in VS Code. **not related** hides a suggestion. Suggestions refresh when chats change, or with **look again**.
 
 ### Brain
 
@@ -122,9 +130,10 @@ Add `--port 4878` to `link` and `start` to use another port.
 
 - **Hooks.** `link` adds hooks to Claude Code's settings. Each one runs `~/.kroog/hook.sh`, which tells Kroog what the chat is doing and where its inbox is. When Kroog isn't running, the hook gives up in a moment and changes nothing.
 - **The registry.** Claude Code keeps a list of its running chats in `~/.claude/sessions/` (id, folder, busy or idle, inbox). Kroog reads it every few seconds. That's how a chat opened before Kroog started still shows as open.
+- **Sending context into an open chat** uses that chat's inbox, a private socket Claude Code opens for each chat. In the editor it arrives as a message from another session, so it can never approve anything for you.
 - **Inboxes.** Since Claude Code 2.1.224, every chat has a private inbox, a socket only your user can reach. Kroog sends your messages and briefs there.
 - **Conversations.** The conversation shown in a chat's panel comes from Claude Code's own history file for that chat.
-- **Chats Kroog starts.** These run Claude Code on your Mac (`claude -p`), with your usual login, settings and permission rules. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
+- **Claude Code on your Mac.** The AI helper and "Claude reads it first" use Claude Code itself (`claude -p`), with your usual login, settings and permission rules. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
 
 ## Safety
 

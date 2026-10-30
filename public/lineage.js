@@ -403,7 +403,7 @@ function chatNodeHtml(s, mode, ctx, early) {
     label,
     html: `${earlyMark}<span class="st"><span class="w">${liveDot}${esc(lk.word)}${kroog}</span><span class="when"><span data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}</span></span>
       <span class="t">${esc(s.title || 'New chat')}</span>
-      <span class="l">${esc(lineText(s))}</span>
+      <span class="l">${esc(s.ai && s.ai.gist && lk.k !== 'working' && lk.k !== 'needs' ? s.ai.gist : lineText(s))}</span>
       ${cellsHtml(s)}${acts}${picked ? '<span class="pickmark">in brief</span>' : ''}`,
   };
 }
@@ -443,7 +443,7 @@ function subsHtml(s) {
   const memory = (s.inputs || []).filter((x) => x.kind === 'memory').at(-1);
   if (memory) items.push(`<span class="sub mem"><i></i>memory <span class="n">${(memory.notes || []).length}</span></span>`);
   for (const hp of Object.values(s.helpers || {}).slice(-3)) {
-    items.push(`<span class="sub${hp.state === 'working' ? ' on' : ''}"><i></i>${esc(String(hp.type || 'helper').toLowerCase())}</span>`);
+    items.push(`<span class="sub${hp.state === 'working' ? ' on' : ''}" title="${esc(hp.task || '')}"><i></i>${esc(String(hp.type || 'agent').toLowerCase())}</span>`);
   }
   const more = Object.keys(s.helpers || {}).length - 3;
   if (more > 0) items.push(`<span class="sub n">+${more}</span>`);
@@ -822,7 +822,16 @@ function renderOverlay(S, UI, model) {
   const sessions = model.sessions;
   const projects = new Set(sessions.map(laneKey)).size;
   const demo = S.info.mode === 'demo';
-  const tl = sessions.length ? `${plural(sessions.length, 'chat')} in ${plural(projects, 'project')} this week` : '';
+  const digest = [];
+  const count = (k) => sessions.filter((s) => look(s).k === k).length;
+  if (count('needs')) digest.push(`${count('needs')} need${count('needs') === 1 ? 's' : ''} you`);
+  if (count('working')) digest.push(`${count('working')} working`);
+  if (count('open')) digest.push(`${count('open')} open`);
+  const agents = sessions.reduce((n, s) => n + Object.keys(s.helpers || {}).length, 0);
+  const files = new Set(sessions.flatMap((s) => s.files || [])).size;
+  if (agents) digest.push(plural(agents, 'agent'));
+  if (files) digest.push(plural(files, 'file'));
+  const tl = sessions.length ? `${plural(sessions.length, 'chat')} in ${plural(projects, 'project')} this week${digest.length ? ` · ${digest.join(' · ')}` : ''}` : '';
   const picking = UI.handoff.active;
   let html = '';
   if (model.all.length) html += weekBarHtml(model);
@@ -838,7 +847,8 @@ function renderOverlay(S, UI, model) {
     <span><svg width="22" height="8"><path d="M1 4 H21" stroke="var(--line-2)" stroke-width="1.25"/><circle cx="21" cy="4" r="2.5" fill="var(--paper)" stroke="var(--line-2)"/></svg>brief</span>
     <span><svg width="22" height="8"><path d="M1 4 H21" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="0.5 5" stroke-linecap="round"/></svg>memory</span>
     <span><svg width="24" height="10"><path d="M1 5 H17" stroke="var(--line-2)" stroke-width="1.25"/><circle cx="20" cy="5" r="3.5" fill="none" stroke="var(--line-2)" stroke-width="1.25"/></svg>continued</span>
-    <span><svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="var(--paper)" stroke="var(--ink-2)"/></svg>helper</span>
+    <span><svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="var(--paper)" stroke="var(--ink-2)"/></svg>agent</span>
+    <span class="lg-cells" title="a step; an agent's step; asked you; failed"><svg width="34" height="8"><rect x="0" y="1" width="6" height="6" fill="var(--ink-2)"/><rect x="9.5" y="1.5" width="5" height="5" fill="none" stroke="var(--ink-3)"/><rect x="18" y="1" width="6" height="6" fill="var(--amber)"/><rect x="27" y="1" width="6" height="6" fill="var(--error)"/></svg>steps</span>
     <span><svg width="8" height="10"><rect x="1" y="0" width="6" height="10" fill="var(--accent)"/></svg>working</span>
   </div>`;
   if (!model.all.length) html += emptyHtml(S);

@@ -655,3 +655,42 @@ details.menu .menu-items button:hover, details.menu .menu-items button:focus-vis
 /* ---- states in the list (v0.8) ---- */
 .row .end .live-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
 .row.k-open { --k: var(--ink-2); }
+
+/* ---- the chat profile (v0.9) ---- */
+.side-body.profile { display: block; }
+.side-foot { flex: none; border-top: 1px solid var(--line); padding: 12px 20px; background: var(--paper); }
+.side-foot .row { display: flex; gap: 8px; }
+.side-foot .row.end { justify-content: flex-end; }
+.readout .quote.later { margin-top: 6px; }
+.readout .quote .k { color: var(--ink-3); margin-right: 4px; }
+.readout code { font-size: 12px; background: var(--code-bg); padding: 0 4px; border-radius: 2px; }
+.readout .notes { margin: 4px 0 0 0; padding-left: 16px; font-size: 13px; color: var(--ink-2); }
+.readout .notes li { margin: 2px 0; }
+.agents { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.agents li { display: flex; gap: 8px; align-items: baseline; }
+.agents li i { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--ink-2); background: var(--paper); transform: translateY(-1px); }
+.agents li.on i { background: var(--accent); border-color: var(--accent); animation: blink 1.1s steps(2, start) infinite; }
+.agents li.bad i { border-color: var(--error); background: var(--error); }
+.agents li b { font-weight: 500; }
+.agents li .task { color: var(--ink-2); }
+.agents li .res { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.agents li .k { color: var(--accent-ink); font-size: 12px; }
+.convo-toggle { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.profile .convo { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+.convo .tl.ag i { background: none; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.legend .lg-cells svg { margin-right: 6px; }
+@media (prefers-reduced-motion: reduce) { .agents li.on i { animation: none; } }
+
+/* ---- suggested groups on the list page (v0.9) ---- */
+.groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.group { border: 1px solid var(--line); border-left: 2px solid var(--accent); border-radius: 4px; padding: 12px 14px; background: var(--paper); display: grid; gap: 8px; }
+.group .g-head { display: grid; gap: 2px; }
+.group .g-head b { font-weight: 500; }
+.group .g-head .quiet { font-size: var(--small); }
+.group .g-chats { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.group .g-chats li { display: grid; gap: 1px; }
+.group .g-chats .quiet { font-size: 12px; }
+.group .g-acts { display: flex; align-items: center; gap: 12px; margin-top: 4px; white-space: nowrap; }
+.section-head .g-by { margin-left: 8px; font-size: 12px; }
+.section-head #groups-again { margin-left: auto; font-size: 12px; }
+.g-empty { margin: 0 0 18px; font-size: var(--small); }

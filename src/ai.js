@@ -221,7 +221,7 @@ function demoSummary(s) {
   const done = (s.plan || []).filter((p) => p.state === 'done').length;
   const todo = (s.plan || []).filter((p) => p.state !== 'done');
   return {
-    gist: todo.length ? `${done} steps done; next: ${truncate(todo[0].text, 40)}` : truncate(s.lastReply ? s.lastReply.split('\n')[0] : s.title || 'A chat', 70),
+    gist: todo.length ? `${done} step${done === 1 ? '' : 's'} done; next: ${truncate(todo[0].text, 40)}` : truncate(s.lastReply ? s.lastReply.split('\n')[0] : s.title || 'A chat', 70),
     keywords: [...new Set((s.files || []).slice(-3).map((f) => f.split('/').pop()).concat(s.project ? [s.project] : []))].slice(0, 4),
   };
 }

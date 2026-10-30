@@ -14,6 +14,7 @@ import { Inbox } from '../src/inbox.js';
 import { doctor, printDoctor } from '../src/doctor.js';
 import { Presence } from '../src/presence.js';
 import { retitle } from '../src/titles.js';
+import { Groups } from '../src/groups.js';
 import { SecondBrain } from '../src/memory/index.js';
 import { runMcp, mcpAddArgs } from '../src/mcp.js';
 import { cleanEnv } from '../src/claude-cli.js';
@@ -29,7 +30,7 @@ import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -93,6 +94,8 @@ async function start({ demo }) {
   const runner = new Runner({ store, engine, getSettings: () => settings, demo });
   const ai = new AiHelper({ store, engine, runner, getSettings: () => settings, getKey: () => (demo ? null : readApiKey()), demo });
   notes.ai = ai;
+  // Suggested groups of chats about the same work, for the list page.
+  const groups = new Groups({ store, ai, getSettings: () => settings });
   // The second brain: your ~/.claude files, project .claude docs and Kroog notes, searchable.
   const brain = new SecondBrain({
     dir: nodePath.join(p.home, 'brain'),
@@ -114,6 +117,7 @@ async function start({ demo }) {
     notesError: notes.lastError,
     claude: { ...runner.status(), registry: presence.available, open: presence.all().length },
     ai: ai.status(),
+    groups: groups.status(),
     brain: brain.status(),
     brainConnected,
     lastEvents: store.data.lastEvents,
@@ -174,6 +178,36 @@ async function start({ demo }) {
       if (!r.ok) throw new Error(r.error);
       return { id: r.id, message: 'Started. It runs here in Kroog.' };
     },
+    // Open a chat, or a new chat with text typed in, in the editor: from Kroog itself, so the
+    // browser never has to ask about opening vscode:// links. With a folder, that window opens first.
+    'open-chat': async ({ editor, cwd, session, prompt } = {}) => {
+      if (demo) return { demo: true, message: 'In the demo nothing opens. With your own chats this opens the editor.' };
+      const ed = ['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : settings.defaultEditor || 'vscode';
+      const folder = String(cwd || '');
+      const sid = String(session || '');
+      const text = String(prompt || '');
+      if (sid && !/^[A-Za-z0-9_-]{6,80}$/.test(sid)) throw new Error('Bad chat id.');
+      const q = [];
+      if (sid) q.push(`session=${encodeURIComponent(sid)}`);
+      if (text) q.push(`prompt=${encodeURIComponent(text.slice(0, 16000))}`);
+      const url = `${ed}://anthropic.claude-code/open${q.length ? `?${q.join('&')}` : ''}`;
+      if (folder && fs.existsSync(folder)) {
+        runner.open(`${ed}://file${folder.endsWith('/') ? folder : `${folder}/`}`);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      runner.open(url);
+      return { url, cut: text.length > 16000 };
+    },
+    // Write Library notes for one chat now (decisions, findings, how-tos, open questions).
+    'notes-for': async ({ id } = {}) => {
+      const s = store.session(String(id || ''));
+      if (!s) throw new Error('That chat is gone.');
+      if (!notes.enabled()) throw new Error('Notes are off, or the AI helper is off. See setup.');
+      if ((s.lastReply || '').length < 40) throw new Error('This chat has no reply to take notes from yet.');
+      notes.lastRun.delete(s.id);
+      const added = await notes.write(s);
+      return { message: added.length ? `${added.length} note${added.length === 1 ? '' : 's'} kept in the library.` : 'Nothing worth keeping in its last reply.' };
+    },
     'to-editor': async ({ id } = {}) => {
       const r = runner.toEditor(String(id || ''));
       if (!r.ok) throw new Error(r.error);
@@ -195,6 +229,7 @@ async function start({ demo }) {
     },
     'brain-search': async ({ query = '', kinds = null, project } = {}) => ({ results: await brain.search(String(query).slice(0, 500), { kinds: Array.isArray(kinds) ? kinds : null, project }) }),
     'brain-recent': async () => ({ results: brain.recent(10) }),
+    groups: async ({ force } = {}) => ({ groups: await groups.refresh({ force: Boolean(force) }) }),
     'brain-map': async () => {
       const chats = Object.values(store.data.sessions)
         .filter((x) => !x.archived && (x.lastPrompt || x.lastReply))
@@ -225,7 +260,10 @@ async function start({ demo }) {
     },
   };
 
-  const { server, closeClients } = createServer({ port, token, engine, store, mode: demo ? 'demo' : 'live', getSettings: () => settings, updateSettings, info, actions });
+  const { server, closeClients } = createServer({ port, token, engine, store, mode: demo ? 'demo' : 'live', getSettings: () => settings, updateSettings, info, actions, groups });
+  // Refresh the suggestions now and then, when something changed.
+  setTimeout(() => groups.refresh().catch(() => {}), demo ? 12000 : 20000).unref();
+  setInterval(() => groups.refresh().catch(() => {}), 10 * 60000).unref();
 
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {

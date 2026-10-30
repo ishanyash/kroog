@@ -92,7 +92,10 @@ export function cleanPrompt(prompt) {
 }
 
 export function titleFromPrompt(prompt) {
-  const t = oneLine(cleanPrompt(prompt)).replace(/\[(Kroog|Crew) brief [a-z0-9]+\]/gi, '').trim();
+  // The first line of what was typed, then its first sentence.
+  const cleaned = cleanPrompt(prompt).replace(/\[(Kroog|Crew) brief [a-z0-9]+\]/gi, '');
+  const line = cleaned.split('\n').map((l) => l.trim()).find(Boolean) || '';
+  const t = oneLine(line).trim();
   if (!t) return '';
   const firstSentence = t.split(/(?<=[.!?])\s/)[0];
   // A title reads better without the full stop at the end.
