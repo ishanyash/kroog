@@ -484,6 +484,7 @@ function placeName(s) {
 function whereLine(s) {
   if (kroogRunning(s)) return '<span class="live">kroog is starting it</span>';
   if (s.live) return `<span class="live">open in ${esc(placeName(s))}</span>`;
+  if (s.openable === false) return '<span>started by an older Kroog, so VS Code cannot open it</span>';
   return `<span>not open now, last in ${esc(placeName(s))}</span>`;
 }
 
@@ -662,9 +663,13 @@ function profileHtml(s) {
   return html;
 }
 
+// Two things to do with a chat: go to it in the editor, or start the next chat from it. A chat
+// the editor cannot open (an older Kroog started it itself) only offers the second, and hide.
 function footHtml(s) {
   const ed = edName(s);
-  const openBtn = `<button type="button" class="btn soft" data-open-editor="${esc(s.id)}">open in ${esc(ed)}</button>`;
+  const openBtn = s.openable === false
+    ? `<button type="button" class="btn soft" data-archive="${esc(s.id)}">hide</button>`
+    : `<button type="button" class="btn soft" data-open-editor="${esc(s.id)}">${s.live ? 'go to it in' : 'open in'} ${esc(ed)}</button>`;
   return `<div class="row end">${openBtn}<button type="button" class="btn solid" data-handoff="${esc(s.id)}">new chat from this</button></div>`;
 }
 
@@ -761,29 +766,40 @@ function endHandoff() {
   renderAll(false);
 }
 
+// The body of the brief: one section per chat. The server wraps it with the opening line,
+// the goal, and what the new chat should do with it (see contextMessage in engine.js).
+// When the AI helper has written a chat's "done so far" and "from here" lines, they stand in
+// for most of its last reply: shorter, and already the point.
 function composeBrief() {
   const h = UI.handoff;
-  const lines = ['Context from Kroog, the map of my Claude Code chats: what earlier chats on this work established. Treat it as the starting point for this chat, and ask if anything is unclear.'];
-  if (h.target === 'new' && h.goal.trim()) lines.push('', `Goal: ${h.goal.trim()}`);
+  const lines = [];
   for (const src of h.sources) {
     const s = S.sessions.get(src.id);
     if (!s) continue;
     const inc = src.include;
     const parts = [];
-    if (inc.prompt && s.lastPrompt) parts.push(`What was asked:\n${clipText(s.lastPrompt.replace(/\[Kroog brief [a-z0-9]+\]/i, '').trim(), h.short ? 300 : 800)}`);
-    if (inc.reply && s.lastReply) parts.push(`Its last reply:\n${clipText(s.lastReply, h.short ? 500 : 2500)}`);
+    const ai = s.ai || {};
+    const asked = s.firstPrompt || s.lastPrompt || '';
+    if (inc.prompt && asked) parts.push(`What was asked:\n${clipText(cleanAsk(asked), h.short ? 300 : 800)}`);
+    if (inc.reply) {
+      const done = Array.isArray(ai.done) ? ai.done : [];
+      const next = Array.isArray(ai.next) ? ai.next : [];
+      if (done.length) parts.push(`What it did:\n${done.map((x) => `- ${x}`).join('\n')}`);
+      if (next.length) parts.push(`What was left:\n${next.map((x) => `- ${x}`).join('\n')}`);
+      if (s.lastReply) parts.push(`${done.length ? 'From its last reply' : 'Its last reply'}:\n${clipText(s.lastReply, h.short ? 500 : done.length ? 1200 : 2500)}`);
+    }
     if (inc.plan && (s.plan || []).length) parts.push(`Its plan:\n${s.plan.map((p) => `- [${p.state === 'done' ? 'done' : p.state === 'now' ? 'in progress' : 'to do'}] ${p.text}`).join('\n')}`);
     if (inc.files && (s.files || []).length) parts.push(`Files it changed:\n${s.files.slice(-20).map((f) => `- ${shortFile(f, s.cwd)}`).join('\n')}`);
     if (inc.notes) {
       const ns = S.notes.filter((x) => x.sessionId === s.id);
       if (ns.length) parts.push(`Notes:\n${ns.map((x) => `- ${x.type}: ${x.text}`).join('\n')}`);
     }
-    if (parts.length) lines.push('', `From the chat "${s.title || 'New chat'}" (${s.project}, ${look(s).word}):`, ...parts);
+    if (parts.length) lines.push(`From the chat "${s.title || 'New chat'}" (${s.project}, ${look(s).word}, ${dayish(s.lastAt)}):`, ...parts, '');
   }
-  if ((h.extra || []).length) lines.push('', 'From the second brain:', ...h.extra.map((x) => `--- ${x.title} ---\n${clipText(x.text, h.short ? 600 : 2500)}`));
+  if ((h.extra || []).length) lines.push('From the second brain:', ...h.extra.map((x) => `--- ${x.title} ---\n${clipText(x.text, h.short ? 600 : 2500)}`), '');
   const extra = S.notes.filter((x) => h.notes.includes(x.id));
-  if (extra.length) lines.push('', 'Notes from the Library:', ...extra.map((x) => `- ${x.type}: ${x.text} (${x.project})`));
-  return lines.join('\n');
+  if (extra.length) lines.push('Notes from the Library:', ...extra.map((x) => `- ${x.type}: ${x.text} (${x.project})`), '');
+  return lines.join('\n').trim();
 }
 
 // The brief that will be sent: the one the AI helper wrote (and you may have edited), or
@@ -807,7 +823,8 @@ function briefPanelHtml() {
   const h = UI.handoff;
   const brief = briefText();
   const n = words(brief);
-  const live = visibleSessions(S).filter((s) => s.status !== 'ended' || canRun()).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+  // Chats the context can go into: open ones (straight in), and ones the editor can open.
+  const live = visibleSessions(S).filter((s) => s.inbox || s.openable !== false).sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.lastAt || 0) - (a.lastAt || 0));
   const folders = [...new Set([...S.sessions.values()].map((s) => s.cwd).filter(Boolean))];
   if (!h.runTarget || !live.some((s) => s.id === h.runTarget)) h.runTarget = live[0] ? live[0].id : '';
   if (!h.memoryCwd || !folders.includes(h.memoryCwd)) {
@@ -855,8 +872,8 @@ function briefPanelHtml() {
   } else if (h.target === 'running') {
     const t = S.sessions.get(h.runTarget);
     let note = '';
-    if (t && t.inbox) note = `It goes straight into the chat, which is open in ${esc(edName(t))}.`;
-    else if (t) note = `It is not open right now. Kroog opens it in ${esc(edName(t))} with a line to paste.`;
+    if (t && t.inbox) note = `It goes straight into the chat, which is open in ${esc(edName(t))}, as its next message.`;
+    else if (t) note = `It is not open right now. Kroog opens it in ${esc(edName(t))} and sends the context in as soon as it is there (the clipboard if that fails).`;
     destFields = live.length
       ? `<div class="field"><label for="ho-run">Which chat</label><select id="ho-run">${live.map((s) => `<option value="${esc(s.id)}" ${s.id === h.runTarget ? 'selected' : ''}>${esc(trim(s.title || 'New chat', 56))} (${esc(look(s).word)})</option>`).join('')}</select></div>${note ? `<p class="quiet">${note}</p>` : ''}`
       : '<p class="quiet">No chats to send to.</p>';
@@ -865,7 +882,7 @@ function briefPanelHtml() {
       ? `<div class="field"><label for="ho-mem">Project folder</label><select id="ho-mem">${folders.map((f) => `<option value="${esc(f)}" ${f === h.memoryCwd ? 'selected' : ''}>${esc(folderName(f))}</option>`).join('')}</select></div>`
       : '<p class="quiet">No project folders yet.</p>';
   }
-  const sendLabel = h.target === 'new' ? `open a new chat in ${EDITORS[editor] || 'VS Code'}` : h.target === 'running' ? 'send the brief' : 'add to project memory';
+  const sendLabel = h.target === 'new' ? `open a new chat in ${EDITORS[editor] || 'VS Code'}` : h.target === 'running' ? 'send the context' : 'add to project memory';
   const disabled = !count || h.aiBusy || h.sending || (h.target === 'running' && !live.length) || (h.target === 'memory' && !folders.length) || (h.target === 'new' && !h.newCwd);
   const aiRow = aiOn()
     ? `<div class="row ai-row"><button type="button" class="btn sm soft" id="ho-ai" ${h.aiBusy || !count ? 'disabled' : ''}>${h.aiBusy ? 'writing' : h.aiText != null ? 'write it again' : 'write it with ai'}</button>${h.aiText != null ? '<button type="button" class="linkish quiet" id="ho-ai-reset">use the plain version</button>' : '<span class="quiet">merges the chats into one short brief</span>'}</div>`
@@ -879,7 +896,7 @@ function briefPanelHtml() {
       <div class="where"><span>Click chats on the canvas to add or remove them.</span></div></div>
     <div class="side-body">
       <div>${srcHtml || '<p class="quiet">Nothing in the brief yet. Click a chat on the canvas, or use a note from the library.</p>'}</div>
-      <div class="field"><span class="label">Send it to</span><div class="dest">${radio('new', 'a new chat', 'opens in your editor with the context as its first message')}${radio('running', 'an existing chat', 'the context goes into that chat')}${radio('memory', 'project memory', 'every new chat in that folder starts with it')}</div></div>
+      <div class="field"><span class="label">Send it to</span><div class="dest">${radio('new', 'a new chat', 'opens in your editor with the context as its first message')}${radio('running', 'an existing chat', 'the context goes into that chat as its next message')}${radio('memory', 'project memory', 'every new chat in that folder starts with it')}</div></div>
       ${destFields}
       ${h.aiText != null ? '' : `<label class="check"><input type="checkbox" id="ho-short" ${h.short ? 'checked' : ''}><span>keep it short</span></label>`}
       ${aiRow}
@@ -892,7 +909,9 @@ async function sendHandoff() {
   const h = UI.handoff;
   if (h.sending) return;
   const text = briefText();
+  const target0 = S.sessions.get(h.runTarget);
   if (h.target === 'new') toast(`Opening ${EDITORS[h.editor] || 'VS Code'} with a new chat. The context goes in as soon as the chat is there (up to a minute if VS Code has to start).`, 50000);
+  else if (h.target === 'running' && target0 && !target0.inbox) toast(`Opening "${trim(target0.title || 'the chat', 40)}" in ${edName(target0)}. The context goes in as soon as it is there.`, 50000);
   h.sending = true;
   renderAll(false);
   const r = await act(post('handoff', {
@@ -916,21 +935,24 @@ async function sendHandoff() {
     return;
   }
   if (r.delivered === 'inbox') {
-    toast(`Sent. The brief went straight into "${trim((target && target.title) || 'the chat', 40)}".`, 7000);
+    toast(`Sent. The context went into "${trim((target && target.title) || 'the chat', 40)}" as its next message.`, 7000);
     endHandoff();
     return;
   }
   if (r.delivered === 'demo') {
-    toast('In the demo nothing opens. With your own chats, VS Code opens a new chat and the context goes in as its first message.', 8000);
+    toast(h.target === 'new'
+      ? 'In the demo nothing opens. With your own chats, VS Code opens a new chat and the context goes in as its first message.'
+      : 'In the demo nothing opens. With your own chats, VS Code opens that chat and the context goes in as its next message.', 8000);
     endHandoff();
     return;
   }
-  if (r.delivered === 'paste' && h.target === 'new') {
+  if (r.delivered === 'paste') {
     let copied = Boolean(r.copied);
     if (!copied) { try { await navigator.clipboard.writeText(r.prompt); copied = true; } catch { /* no clipboard here */ } }
+    const where = h.target === 'new' ? 'opened a new chat' : `opened "${trim((target && target.title) || 'the chat', 40)}"`;
     toast(copied
-      ? `${EDITORS[h.editor] || 'VS Code'} opened a new chat, but Kroog could not reach it. The context is on your clipboard: paste it there and press Enter.`
-      : `${EDITORS[h.editor] || 'VS Code'} opened a new chat, but Kroog could not reach it. Press copy below, then paste the context there and press Enter.`, 12000);
+      ? `${EDITORS[h.editor] || 'VS Code'} ${where}, but Kroog could not reach it. The context is on your clipboard: paste it there and press Enter.`
+      : `${EDITORS[h.editor] || 'VS Code'} ${where}, but Kroog could not reach it. Press copy below, then paste the context there and press Enter.`, 12000);
     if (copied) endHandoff();
     return;
   }
@@ -945,29 +967,9 @@ async function sendHandoff() {
     endHandoff();
     return;
   }
-  if (r.delivered === 'kroog') {
-    const ed = EDITORS[h.editor] || 'VS Code';
-    toast(r.mode === 'new' || r.mode === 'resume' ? `Haiku is reading the context. The chat opens in ${ed} in a few seconds; if ${ed} asks whether to allow it, say yes.` : 'Sent.', 9000);
-    endHandoff();
-    UI.selected = r.id;
-    renderAll(false);
-    if (UI.route === 'lineage') setTimeout(() => reveal(r.id, true), 150);
-    return;
-  }
-  if (r.delivered === 'editor' && r.url) {
-    openUrl(r.url);
-    toast(`Opening ${target ? edName(target) : 'the editor'}. Press Enter there and the brief goes in.`, 8000);
-  } else if (r.delivered === 'now') toast('Sent. It carries on now.');
-  else if (r.delivered === 'queued') toast('Sent. It reads the brief after its current step.');
+  if (r.delivered === 'now') toast('Sent. The chat reads it now.');
+  else if (r.delivered === 'queued') toast('Sent. The chat reads it after its current step.');
   else if (r.delivered === 'memory') toast('Added to project memory. New chats in that folder start with it.');
-  else if (r.delivered === 'paste' && r.url) {
-    try { await navigator.clipboard.writeText(r.prompt); } catch { /* ignore */ }
-    if (target) await openInEditor({ editor: target.editor || undefined, cwd: target.cwd, session: target.id }); else openUrl(r.url);
-    toast(`That chat is not open right now, so Kroog opened it in ${target ? edName(target) : 'the editor'}. A short line with the brief is copied: paste it there (Cmd+V) and press Enter.`, 10000);
-  } else if (r.delivered === 'copy') {
-    try { await navigator.clipboard.writeText(r.prompt); } catch { /* ignore */ }
-    toast('Copied. Paste it into that chat and the brief goes with it.', 8000);
-  }
   endHandoff();
 }
 
@@ -1169,16 +1171,15 @@ function renderSetup() {
       </div></section>
 
       <section class="set"><h2>Claude Code on this Mac ${claudeState}</h2><div class="body">
-        <p>Kroog uses Claude Code itself for two things: the AI helper (summaries, notes, merged briefs, with Haiku on your plan) and, when you ask, starting a new chat with the context already read, which then opens in your editor. Chats are always yours to carry on in VS Code or Cursor.</p>
-        ${demo ? '<p class="quiet">In the demo, runs are pretend.</p>' : cl.found
+        <p>Kroog uses Claude Code itself for the AI helper only (summaries, notes and merged briefs, with Haiku on your plan). Your chats always run in VS Code or Cursor; Kroog opens them there and sends context into them.</p>
+        ${demo ? '<p class="quiet">In the demo, the helper is pretend.</p>' : cl.found
           ? `<p class="quiet">Using <code>${esc(tildePath(cl.path))}</code>${cl.from === 'vscode' || cl.from === 'cursor' ? ` (the copy inside ${cl.from === 'cursor' ? 'Cursor' : 'VS Code'})` : ''}, version ${esc(cl.version || '')}.</p>`
           : '<p>Kroog could not find Claude Code. Install it for the Terminal (see code.claude.com), or paste the path to it below.</p>'}
         ${demo ? '' : `<form class="keyrow" id="claude-form" autocomplete="off"><label for="set-claude" class="sr">Path to Claude Code</label><input type="text" id="set-claude" placeholder="found on its own; or paste a path, like ~/.local/bin/claude" value="${esc(st.claudePath || '')}" autocomplete="off"><button type="submit" class="btn soft">check</button></form>`}
         ${demo ? '' : info.editorCommand
           ? `<p class="quiet">${esc(EDITORS[st.defaultEditor] || 'VS Code')}'s own command was found, so project folders open without a dialog.</p>`
           : `<p class="quiet">${esc(EDITORS[st.defaultEditor] || 'VS Code')}'s own command (<code>${st.defaultEditor === 'cursor' ? 'cursor' : 'code'}</code>) was not found, so each project folder opens through a link and macOS asks once whether to allow it (tick "allow without asking"). To avoid that, run "Shell Command: Install '${st.defaultEditor === 'cursor' ? 'cursor' : 'code'}' command in PATH" from the editor's command palette, then restart Kroog.</p>`}
-        <div class="field"><label for="set-kroogperm">When Kroog starts a chat for you</label><select id="set-kroogperm"><option value="default" ${st.kroogPermissionMode !== 'acceptEdits' ? 'selected' : ''}>ask me here before edits and commands</option><option value="acceptEdits" ${st.kroogPermissionMode === 'acceptEdits' ? 'selected' : ''}>edit files without asking; ask before commands</option></select></div>
-        <p class="quiet">That first turn can ask to read or edit files. Kroog shows the question only while a Kroog tab is open; with no tab open, it is not allowed.</p>
+
       </div></section>
 
       <section class="set"><h2>AI helper ${aiState}</h2><div class="body">

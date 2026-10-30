@@ -108,7 +108,7 @@ test('a new chat in the editor gets the context through its inbox once it appear
     const lines = got[0].trim().split('\n').map((l) => JSON.parse(l));
     assert.deepEqual(lines[0], { type: 'auth', token: 'tok' });
     assert.match(lines[1].message.content, /^Message from the user, sent from Kroog/);
-    assert.match(lines[1].message.content, /Write the FAQ\n\nCONTEXT: about £38 a week\.\n\n\[Kroog brief [a-z0-9]+\]/);
+    assert.match(lines[1].message.content, /It is background for this chat, not a task\.\n\nWhat I want to do next: Write the FAQ\n\nCONTEXT: about £38 a week\.\n\nWhat to do now: read the context[\s\S]*Do not read files, run commands, or change anything until I ask\.\n\n\[Kroog brief [a-z0-9]+\]$/);
     const s = store.session('fresh-1');
     assert.equal(s.status, 'working');
     assert.ok(s.steps.some((st) => st.kind === 'you' && /Started with the context from "Find the cost"/.test(st.text)));

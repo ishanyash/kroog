@@ -98,6 +98,7 @@ export class Runner {
 
     if (mode !== 'resume') {
       Object.assign(s, {
+        startedByKroog: true,
         title: title || (source ? truncate(`${source.title || 'Untitled chat'}, continued`, 80) : titleFromPrompt(text)),
         plan: source ? [...(source.plan || [])] : [],
         files: source ? [...(source.files || [])] : [],

@@ -97,17 +97,6 @@ test('hooks from a chat Kroog runs keep its label and do not repeat the prompt',
   }
 });
 
-test('handoff runs a new chat in Kroog with the brief and records the lineage', async () => {
-  const { dir, store, engine, calls } = await setup();
-  await engine.handle('UserPromptSubmit', { session_id: 'a', cwd: dir, prompt: 'x' }, { entry: 'claude-vscode' });
-  const r = await engine.handoff({ text: 'BRIEF BODY', goal: 'Write the post', target: 'new', run: 'kroog', cwd: dir, sources: ['a'] });
-  assert.ok(r.ok, r.error);
-  const s = store.session(r.id);
-  assert.equal(s.title, 'Write the post');
-  assert.deepEqual(s.inputs.find((x) => x.kind === 'brief').from, ['a']);
-  await until(() => s.status === 'done' && calls().length >= 1);
-  assert.match(calls().at(-1).input, /^Write the post\n\nBRIEF BODY/);
-});
 
 test('errors and stop are shown on the chat', async () => {
   const { dir, store, engine, runner } = await setup();
@@ -160,21 +149,3 @@ test('without Claude Code, a key or a local model the helper is off and Kroog sa
   assert.match(r.error, /could not find Claude Code/);
 });
 
-test('combining chats into a new chat starts it on Haiku, then opens the folder and the chat in VS Code', async () => {
-  const { dir, store, engine, calls, opened } = await setup();
-  await engine.handle('UserPromptSubmit', { session_id: 'a', cwd: dir, prompt: 'x' }, { entry: 'claude-vscode' });
-  const r = await engine.handoff({ text: 'BRIEF', goal: 'Write the FAQ', target: 'new', run: 'editor', editor: 'vscode', cwd: dir, sources: ['a'] });
-  assert.ok(r.ok, r.error);
-  // No `code` command in the test environment, so the folder opens through its link.
-  assert.equal(opened[0], `vscode://file${dir}/`, 'the project folder opens first');
-  const s = store.session(r.id);
-  assert.ok(await until(() => opened.length === 2));
-  assert.equal(opened[1], `vscode://anthropic.claude-code/open?session=${r.id}`);
-  assert.equal(s.owner, 'editor');
-  assert.equal(s.app, 'VS Code');
-  assert.deepEqual(s.inputs.find((x) => x.kind === 'brief').from, ['a']);
-  await until(() => calls().length >= 1);
-  const call = calls().at(-1);
-  assert.match(call.input, /Write the FAQ\n\nBRIEF[\s\S]*carries on with you in VS Code/);
-  assert.equal(call.args[call.args.indexOf('--model') + 1], 'haiku', 'the reading turn runs on Haiku');
-});

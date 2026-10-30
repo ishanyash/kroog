@@ -31,7 +31,7 @@ import { Runner } from '../src/runner.js';
 import { EditorOpener } from '../src/editor.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);

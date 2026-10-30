@@ -267,9 +267,12 @@ test('lineage: a brief made from one chat is recorded on the chat that starts wi
   const { store, engine, hook } = setup();
   await hook('UserPromptSubmit', { prompt: 'Add a cost check to dbt runs.' }, 'a');
   await hook('Stop', { last_assistant_message: 'Done. Runs over £5 stop.' }, 'a');
-  const r = await engine.handoff({ text: 'Brief: runs over £5 stop.', goal: 'Fix the failing cost test', target: 'new', editor: 'cursor', sources: ['a'] });
+  // The context message, as it goes into a new chat (the clipboard way here).
+  const r = await engine.handoff({ text: 'Brief: runs over £5 stop.', goal: 'Fix the failing cost test', target: 'new', run: 'typed', editor: 'cursor', cwd: '/Users/me/code/app', sources: ['a'] });
   assert.equal(r.ok, true);
-  assert.match(r.url, /^cursor:\/\/anthropic\.claude-code\/open\?prompt=/);
+  assert.equal(r.delivered, 'typed');
+  assert.match(r.prompt, /^Context from Kroog, the map of my Claude Code chats\. Below is what an earlier chat on this work established\. It is background for this chat, not a task\.\n\nWhat I want to do next: Fix the failing cost test\n\nBrief: runs over £5 stop\.\n\nWhat to do now: /);
+  assert.match(r.prompt, /Do not read files, run commands, or change anything until I ask\.\n\n\[Kroog brief [a-z0-9]+\]$/);
   assert.equal(store.pendingBriefs().length, 1);
   await hook('UserPromptSubmit', { prompt: r.prompt }, 'b');
   const b = store.session('b');
@@ -278,6 +281,18 @@ test('lineage: a brief made from one chat is recorded on the chat that starts wi
   assert.equal(b.inputs[0].kind, 'brief');
   assert.deepEqual(b.inputs[0].from, ['a']);
   assert.equal(store.pendingBriefs().length, 0, 'a used brief is no longer waiting');
+});
+
+test('a chat started from chats without a goal is named after them', async () => {
+  const { store, engine, hook } = setup();
+  await hook('UserPromptSubmit', { prompt: 'Add a cost check to dbt runs.' }, 'a');
+  await hook('UserPromptSubmit', { prompt: 'Find out what our dbt runs cost each week.' }, 'c');
+  const r = await engine.handoff({ text: 'Brief.', target: 'new', run: 'typed', editor: 'vscode', cwd: '/Users/me/code/app', sources: ['a', 'c'] });
+  assert.equal(r.title, 'From Add a cost check to dbt runs and Find out what our dbt runs cost each we…');
+  assert.match(r.prompt, /^Context from Kroog, the map of my Claude Code chats\. Below is what 2 earlier chats on this work established\./);
+  assert.doesNotMatch(r.prompt, /What I want to do next/);
+  await hook('UserPromptSubmit', { prompt: `Message from the user, sent from Kroog (their dashboard for Claude Code chats):\n\n${r.prompt}` }, 'b');
+  assert.equal(store.session('b').title, r.title);
 });
 
 test('lineage: project memory records which chats the notes came from', async () => {
@@ -321,7 +336,7 @@ test('a typed-in brief: the context is the first message, and the hook only reco
   await hook('Stop', { last_assistant_message: 'About £38 a week.' }, 'a');
   const r = await engine.handoff({ text: 'CONTEXT: about £38 a week.', goal: 'Write the FAQ', target: 'new', run: 'typed', editor: 'vscode', cwd: '/Users/me/code/app', sources: ['a'] });
   assert.equal(r.delivered, 'typed');
-  assert.match(r.prompt, /^Write the FAQ\n\nCONTEXT: about £38 a week\.\n\n\[Kroog brief [a-z0-9]+\]$/);
+  assert.match(r.prompt, /What I want to do next: Write the FAQ\n\nCONTEXT: about £38 a week\.\n\nWhat to do now: [\s\S]*\[Kroog brief [a-z0-9]+\]$/);
   assert.equal(r.cwd, '/Users/me/code/app');
   // The context is on the clipboard, ready to paste into the new chat.
   assert.equal(r.copied, true);

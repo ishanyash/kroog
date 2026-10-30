@@ -17,6 +17,31 @@ import { tallyOf } from './store.js';
 import { copyText } from './clipboard.js';
 import { EditorOpener } from './editor.js';
 
+// The message a chat gets when it starts from other chats' context. It is background, not
+// a task: the chat is told to read it, say in a few lines what it now knows, and then wait.
+// Without that last part a chat takes the context as its orders and starts working.
+export function contextMessage({ goal = '', body = '', id = '', count = 1 } = {}) {
+  const g = String(goal || '').trim();
+  const lines = [
+    `Context from Kroog, the map of my Claude Code chats. Below is what ${count === 1 ? 'an earlier chat' : `${count} earlier chats`} on this work established. It is background for this chat, not a task.`,
+  ];
+  if (g) lines.push('', `What I want to do next: ${g}`);
+  lines.push('', String(body || '').trim(), '');
+  lines.push(g
+    ? 'What to do now: read the context, then reply in at most 5 short lines with what you now know and how you would go about what I want to do next. Then stop and wait for my instructions. Do not read files, run commands, or change anything until I ask.'
+    : 'What to do now: read the context, then reply in at most 5 short lines with what you now know and what could be done from here. Then stop and wait for my instructions. Do not read files, run commands, or change anything until I ask.');
+  if (id) lines.push('', `[Kroog brief ${id}]`);
+  return lines.join('\n');
+}
+
+// What a chat started from a brief is called: the goal, or the chats it came from.
+export function titleForBrief(goal, names = []) {
+  const g = String(goal || '').trim();
+  if (g) return truncate(g.split('\n')[0], 80);
+  if (!names.length) return 'From Kroog';
+  return truncate(`From ${names.join(' and ')}`, 80);
+}
+
 // The same folder, allowing a trailing slash and a workspace that is a parent or child of it.
 function sameFolder(a, b) {
   const x = String(a || '').replace(/\/+$/, '');
@@ -130,6 +155,7 @@ export class Engine {
       firstPrompt: s.firstPrompt || ((all.find((x) => x && x.kind === 'prompt') || {}).text || ''),
       lastReply: s.lastReply ? clip(s.lastReply, PUBLIC_REPLY) : s.lastReply,
       aiFresh: this.ai ? this.ai.fresh(s) : undefined,
+      openable: this.openable(s),
       waitingPermission: Boolean(this.waiter(s.id, 'permission')),
       inbox: live && (this.inbox.has(s.id) || Boolean(this.runner && this.runner.isRunning(s.id)) || Boolean(s.demoLive)),
       live,
@@ -182,7 +208,18 @@ export class Engine {
     return [...changed];
   }
 
+  // Whether the editor can open this chat: it has been in an editor or a terminal (the
+  // editor finds those), not only started by Kroog itself (the editor cannot find those).
+  openable(s) {
+    if (s.seenInEditor) return true;
+    if (s.startedByKroog) return false;
+    const entry = String(s.entry || '');
+    if (entry) return !/^sdk/.test(entry);
+    return Boolean(s.imported) || s.kind === 'ide' || s.kind === 'terminal';
+  }
+
   applyMeta(s, meta) {
+    if (meta && meta.entry === 'claude-vscode') s.seenInEditor = true;
     // A chat Kroog runs keeps its label; the hooks of its `claude -p` turn would call it a script.
     if (s.owner === 'kroog' || (this.runner && this.runner.isRunning(s.id))) return;
     if (!meta || !(meta.entry || meta.bundle || meta.term)) return;
@@ -278,8 +315,10 @@ export class Engine {
             // When the brief itself is in the message (typed in from Kroog), only record it.
             if (!prompt.includes(brief.text.slice(0, 160))) context.push(brief.text);
             store.useBrief(brief.id, s.id);
-            // A chat that starts with a brief is named after the brief's goal, however it got in.
-            if (brief.goal && !s.turns && (fromUser || isJunkTitle(s.title))) s.title = truncate(brief.goal, 80);
+            // A chat that starts with a brief is named after it (the goal, or the chats it
+            // came from), however the brief got in.
+            const name = brief.title || brief.goal;
+            if (name && !s.turns && (fromUser || isJunkTitle(s.title))) s.title = truncate(name, 80);
             this.recordInput(s, { kind: 'brief', brief: brief.id, from: (brief.sources || []).filter((id) => id !== s.id), notes: brief.notes || [], words: countWords(brief.text) });
             store.addStep(s, { kind: 'info', text: s.turns ? 'Got a brief from Kroog' : 'Started with a brief from Kroog' });
           }
@@ -603,7 +642,7 @@ export class Engine {
     }
     // The chat is running somewhere (VS Code, Cursor, a terminal) and has an inbox: the
     // message goes straight in, between its steps or as a new turn if it is idle.
-    if (mode === 'auto' && this.inbox.has(sid)) {
+    if ((mode === 'auto' || mode === 'inbox') && this.inbox.has(sid)) {
       try {
         await this.inbox.send(sid, framed(body));
         this.store.addStep(s, { kind: 'you', text: stepText });
@@ -618,6 +657,8 @@ export class Engine {
         // Closed: fall through to the other ways below.
       }
     }
+    // Only the inbox was wanted: say so, and let the caller open the chat in the editor.
+    if (mode === 'inbox') return { ok: false, code: 'NO_INBOX', error: 'Kroog cannot reach this chat right now.' };
     const runner = this.runner;
     const running = runner && runner.isRunning(sid);
     const live = running || s.status === 'working' || (s.status === 'needs' && s.needs && s.needs.kind === 'permission');
@@ -726,11 +767,12 @@ export class Engine {
     const body = String(text || '').trim();
     if (!body) return { ok: false, error: 'The brief is empty.' };
     const scheme = ['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : 'vscode';
-    const brief = this.store.saveBrief(clip(body, 9000), String(goal || '').trim(), { sources, notes, target: 'new', editor: scheme });
+    const names = sources.map((id) => this.store.session(id)).filter(Boolean).map((x) => truncate(x.title || 'a chat', 40));
+    const brief = this.store.saveBrief(clip(body, 12000), String(goal || '').trim(), { sources, notes, target: 'new', editor: scheme, title: titleForBrief(String(goal || ''), names) });
     const prompt = typed
-      ? `${brief.goal || 'Context for this chat, from Kroog.'}\n\n${brief.text}\n\n[Kroog brief ${brief.id}]`
+      ? contextMessage({ goal: brief.goal, body: brief.text, id: brief.id, count: Math.max(1, sources.length) })
       : `${brief.goal || 'Pick up from the brief.'} [Kroog brief ${brief.id}]`;
-    return { ok: true, id: brief.id, prompt, typed, url: `${scheme}://anthropic.claude-code/open?prompt=${encodeURIComponent(prompt)}` };
+    return { ok: true, id: brief.id, prompt, typed, title: brief.title, url: `${scheme}://anthropic.claude-code/open?prompt=${encodeURIComponent(prompt)}` };
   }
 
   // One entry point for Handoff: a brief made from chats and notes goes to a new chat,
@@ -770,26 +812,16 @@ export class Engine {
     return { ok: true, delivered: 'paste', id: found ? found.sid : null, copied };
   }
 
-  async handoff({ text, goal = '', target = 'new', editor, sessionId, cwd, sources = [], notes = [], run = 'editor' } = {}) {
-    // `run` for a new chat: 'inbox' (the default: a fresh chat opens in the editor and the
-    // context goes in through its inbox as the first message; the clipboard if that fails),
-    // 'typed' (the context goes on the clipboard and a plain new chat opens: paste, press
-    // Enter), 'editor' (Kroog runs the first turn on Haiku, then opens the chat in the
-    // editor) or 'kroog' (keep it here).
+  async handoff({ text, goal = '', target = 'new', editor, sessionId, cwd, sources = [], notes = [], run = 'inbox' } = {}) {
+    // For a new chat, `run` is 'inbox' (a fresh chat opens in the editor and the context goes
+    // in through its inbox as the first message; the clipboard if that fails) or 'typed' (the
+    // context goes on the clipboard and a plain new chat opens: paste, press Enter). Kroog
+    // never runs the chat itself: chats live in the editor.
     const body = String(text || '').trim();
     if (!body) return { ok: false, error: 'The brief is empty. Tick at least one thing to send.' };
     const from = uniq(Array.isArray(sources) ? sources.map(String) : []);
     const noteIds = uniq(Array.isArray(notes) ? notes.map(String) : []);
-    const inKroog = run === 'kroog' && this.runner && this.runner.available();
-    if (run === 'kroog' && !inKroog) return { ok: false, error: 'Kroog could not find Claude Code on this Mac, so it cannot run the chat here. See setup.' };
     const input = { kind: 'brief', from, notes: noteIds, words: countWords(body) };
-    const promptFor = () => `${String(goal || '').trim() || 'Pick up from this brief.'}\n\n${body}`;
-    if (target === 'new' && inKroog) {
-      const folder = String(cwd || '');
-      if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
-      const goalLine = String(goal || '').trim();
-      return this.runner.run({ mode: 'new', cwd: folder, prompt: promptFor(), title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog' });
-    }
     if (target === 'new' && run === 'inbox') {
       const folder = String(cwd || '');
       if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
@@ -805,18 +837,7 @@ export class Engine {
       const copied = await this.copy(made.prompt);
       return { ...made, delivered: 'typed', copied, cwd: String(cwd || '') };
     }
-    // A new chat that lives in VS Code: Kroog starts it in the project folder with the brief
-    // (one short turn), then opens it in the editor, where you carry on.
-    if (target === 'new' && this.runner && this.runner.available()) {
-      const folder = String(cwd || '');
-      if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
-      const goalLine = String(goal || '').trim();
-      const seed = `${promptFor()}\n\n(Started from Kroog. Read the context above, then reply in at most 6 short lines: what you understood, and the first thing you would do. Do not start work and do not edit files. Then stop and wait: the user carries on with you in ${editorName(editor)}.)`;
-      // Haiku for this one reading turn: a few seconds, not a minute.
-      return this.runner.run({ mode: 'new', cwd: folder, prompt: seed, title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog', then: 'editor', editor, model: 'haiku' });
-    }
-    if (target === 'new') return { ...this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds }), delivered: 'editor' };
-
+    if (target === 'new') return { ok: false, error: `Kroog cannot start a chat that way (${String(run || '')}).` };
     if (target === 'memory') {
       const folder = String(cwd || '');
       if (!folder) return { ok: false, error: 'Pick a project folder first.' };
@@ -828,53 +849,55 @@ export class Engine {
     const s = this.store.session(String(sessionId || ''));
     if (!s) return { ok: false, error: 'That chat is gone.' };
     input.from = from.filter((id) => id !== s.id);
-    // A running chat with an inbox gets the brief straight away, wherever it runs.
+    const names = input.from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
+    const label = names.length ? `You sent the context from ${names.join(' and ')}` : 'You sent context from Kroog';
+    const brief = this.store.saveBrief(clip(body, 12000), String(goal || '').trim(), { sources: input.from, notes: noteIds, target: 'running', targetId: s.id, editor: s.editor || editor || null });
+    const message = contextMessage({ goal: brief.goal, body: brief.text, id: brief.id, count: Math.max(1, input.from.length) });
+    // Open somewhere with an inbox: straight in, between its steps or as its next turn.
     if (this.inbox.has(s.id) && !this.waiter(s.id, 'stop')) {
-      const names0 = input.from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
-      const label0 = names0.length ? `You sent a brief made from ${names0.join(' and ')}` : 'You sent a brief from Kroog';
-      const goalLine = String(goal || '').trim();
-      const r = await this.send(s.id, goalLine ? `${goalLine}\n\n${body}` : body, { label: label0 });
+      const r = await this.send(s.id, message, { label, mode: 'inbox' });
       if (r.ok && r.delivered === 'inbox') {
         this.recordInput(s, input);
+        this.store.useBrief(brief.id, s.id);
         this.store.touch(s);
         return r;
       }
     }
+    // Kroog is holding its Stop hook, or the chat is working without an inbox (an older
+    // Claude Code): the message answers the hook, or waits for the chat's next step.
     const live = s.status === 'working' || (s.status === 'needs' && s.needs && s.needs.kind === 'permission');
     if (this.waiter(s.id, 'stop') || live) {
-      const names = input.from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
-      const label = names.length ? `You sent a brief made from ${names.join(' and ')}` : 'You sent a brief from Kroog';
-      const r = await this.send(s.id, body, { label });
-      if (r.ok && (r.delivered === 'now' || r.delivered === 'queued')) {
-        this.recordInput(s, input);
-        this.store.touch(s);
+      const r = await this.send(s.id, message, { label });
+      if (r.ok && ['now', 'queued', 'inbox'].includes(r.delivered)) { this.recordInput(s, input); this.store.useBrief(brief.id, s.id); this.store.touch(s); }
+      return r;
+    }
+    // Not open anywhere Kroog can reach. If the editor can open it, open it there and wait for
+    // its inbox, then send; the chat carries on in the editor, as always.
+    if (!this.openable(s)) return { ok: false, error: 'This chat was started by an older Kroog, so the editor cannot open it and Kroog cannot reach it. Start a new chat from it instead.' };
+    const ed = s.editor || (['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : 'vscode');
+    const r = await this.sendIntoEditor({ editor: ed, session: s, prompt: message, label });
+    if (r.ok && r.delivered === 'inbox') { this.recordInput(s, input); this.store.useBrief(brief.id, s.id); this.store.touch(s); }
+    return { ...r, id: brief.id, prompt: message };
+  }
+
+  // An existing chat, opened in the editor and then fed through its inbox: the editor finds
+  // chats it made (and terminal ones from the same folder); the registry then shows the chat
+  // with its socket, and the text goes in. The clipboard if it does not show up in time.
+  async sendIntoEditor({ editor, session, prompt, label = '', wait = 45000 } = {}) {
+    const s = session;
+    const opened = await this.editor.openChat(editor, { folder: s.cwd || '', sessionId: s.id });
+    if (opened.folder === 'demo') return { ok: true, delivered: 'demo' };
+    const deadline = Date.now() + wait;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 500));
+      this.syncPresence();
+      if (this.inbox.has(s.id)) {
+        const r = await this.send(s.id, prompt, { label, mode: 'inbox' });
+        if (r.ok && r.delivered === 'inbox') return { ok: true, delivered: 'inbox', id: s.id };
+        break;
       }
-      return r;
     }
-    if (inKroog) {
-      const names = input.from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
-      const label = names.length ? `You sent a brief made from ${names.join(' and ')}` : 'You sent a brief from Kroog';
-      const resume = this.presence.available ? !this.presence.isOpen(s.id) : (s.owner === 'kroog' || s.status === 'ended');
-      const r = this.runner.run(resume
-        ? { mode: 'resume', id: s.id, prompt: promptFor(), label }
-        : { mode: 'fork', from: s.id, prompt: promptFor(), label, input: { ...input, from: input.from.filter((x) => x !== s.id) } });
-      if (r.ok && resume) { this.recordInput(s, input); this.store.touch(s); }
-      return r;
-    }
-    // Closed in the editor: Kroog runs one turn with the brief, then opens it in the editor again.
-    if (s.status === 'ended' && this.runner && this.runner.available()) {
-      const r = this.runner.run({ mode: 'resume', id: s.id, prompt: promptFor(), label: 'You sent a brief from Kroog', then: 'editor', editor: s.editor || editor });
-      if (r.ok) { this.recordInput(s, input); this.store.touch(s); }
-      return r;
-    }
-    if (s.status === 'ended') return { ok: false, error: 'This chat is closed. Resume it in the editor first.' };
-    // Waiting for you in the editor: open it there with a short tag, and the brief goes in with your message.
-    const scheme = s.editor || (['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : null);
-    const brief = this.store.saveBrief(clip(body, 9000), String(goal || '').trim(), { sources: input.from, notes: noteIds, target: 'running', targetId: s.id, editor: scheme });
-    const prompt = `${brief.goal || 'Pick up from the brief.'} [Kroog brief ${brief.id}]`;
-    // Kroog can't reach it (no inbox): open the chat, and you paste the short line with the tag.
-    // The link carries no prompt: VS Code refuses one for a chat it has open.
-    if (scheme) return { ok: true, delivered: 'paste', id: brief.id, prompt, url: `${scheme}://anthropic.claude-code/open?session=${encodeURIComponent(s.id)}` };
-    return { ok: true, delivered: 'copy', id: brief.id, prompt };
+    const copied = await this.copy(prompt);
+    return { ok: true, delivered: 'paste', copied };
   }
 }

@@ -63,6 +63,8 @@ export class Store extends EventEmitter {
       // Titles made from editor tags by older versions.
       if (/^\s*</.test(s.title || '')) s.title = titleFromPrompt(s.title) || titleFromPrompt(s.lastPrompt) || '';
       if (/^\s*</.test(s.lastPrompt || '')) s.lastPrompt = cleanPrompt(s.lastPrompt);
+      // Chats an older Kroog started itself (the editor cannot open those).
+      if (!s.entry && !s.seenInEditor && (s.permissionModeKroog || s.owner === 'kroog' || s.kind === 'kroog')) s.startedByKroog = true;
       // Requests that were waiting on an open connection can't survive a restart.
       s.holding = null;
       if (s.needs && s.needs.kind === 'permission') {
@@ -227,6 +229,7 @@ export class Store extends EventEmitter {
       target: extra.target || 'new',
       targetId: extra.targetId || null,
       editor: extra.editor || null,
+      title: extra.title || '',
     };
     const ids = Object.keys(this.data.briefs);
     if (ids.length > 200) delete this.data.briefs[ids[0]];

@@ -4,7 +4,7 @@ Kroog is the map of your Claude Code chats. One browser tab shows every chat in 
 
 - **See.** One week at a time, project by project. Four states: working, needs you, open, done. Hover over a chat for a one-line summary.
 - **Understand.** Open a chat for its profile: what was asked, what got done, the files, the agents and what they came back with, the notes it left, where it came from. The full conversation is one click away.
-- **Connect.** Pick two or three chats with the link key and open a new Claude Code chat whose first message is the context they established.
+- **Connect.** Pick two or three chats (a suggested group, or the link keys) and open a new Claude Code chat whose first message is the context they established. The chat reads it and waits for you.
 - **Remember.** A second brain: your `CLAUDE.md` files, rules, skills and Claude Code's own memory, as a map and a search, usable from inside every Claude Code chat.
 
 It runs only on your Mac, with no editor plugin. Kroog was called Crew while it was a draft.
@@ -78,17 +78,21 @@ Everything else is under **more**: what was asked, the plan, the files, how many
 
 When a chat asks to edit a file or run a command, the question shows at the top of its profile. Answer it in your editor, or here if Kroog is holding it.
 
-### Start a new chat from what others worked out
+### How chats connect
 
-1. Take a suggested group on the **list** page (**new chat from these**), or click the small link key on a chat and add more chats with their keys, or press **new chat from this** in a profile.
-2. The panel lists the chats. Add a goal if you have one, pick the project folder, and press **open a new chat in VS Code**.
-3. VS Code opens a new chat on that folder. The moment it appears in Claude Code's registry, Kroog sends the context into it through the chat's own inbox, so the context is the chat's first message ("Message from the user, sent from Kroog… Context from Kroog, the map of my Claude Code chats: what earlier chats on this work established…") and the chat starts reading it there. Kroog draws the lines from the old chats to the new one, and names it after your goal.
+Every box on the week view is one Claude Code chat, and it lives in your editor. Kroog never runs a chat itself. From any chat there are two things to do:
+- **open in VS Code** goes to that chat (it says **go to it** when the chat is open right now). VS Code can open chats it made and terminal chats from the same folder.
+- **new chat from this** starts the next chat with this one's context.
 
-If no new chat shows up within half a minute (VS Code was slow, or the chat opened on another folder), Kroog puts the context on your clipboard and says so: paste it into the chat and press Enter.
+To combine chats, pick them first, then say where the context goes:
+1. **Pick.** Take a suggested group on the **list** page (**new chat from these**), or click the small link key on a chat and add more chats with their keys, or press **new chat from this** in a profile.
+2. **Say where.** The panel lists the chats you picked. The context can go to **a new chat** (the usual case), to **an existing chat**, or into **project memory** for every future chat in that folder. Add a goal if you have one. Then press the button.
+3. **Kroog gets the context into the chat.** For a new chat, VS Code opens one on the project folder; the moment it appears in Claude Code's registry, Kroog sends the context into it through the chat's own inbox, so it is the chat's first message. For an existing chat that is open, it goes straight in as the next message; for one that is closed, Kroog opens it in VS Code first and then sends. If the chat does not show up within 45 seconds, the context goes on your clipboard and Kroog says so: paste it and press Enter.
+4. **The chat reads and waits.** The message says it is background, not a task, and ends with what to do now: reply in a few lines with what it now knows (and how it would go about your goal, if you gave one), then stop and wait, and not read, run or change anything until you ask. The chat is named after your goal, or after the chats it came from, and Kroog draws the lines from them to it.
 
-Nothing rides in the link itself: VS Code drops long prompts from links, and it only finds sessions it made itself, which is why earlier versions ended up with an empty chat.
+What the context contains, per chat: what was asked, what it did and what was left (the AI helper's short lines when it has written them, else the last reply), its plan, the files it changed, and its notes. **choose what to take from each** (folded away in the panel) changes that per chat; **write it with ai** merges everything into one short brief you can edit; **copy** puts the whole message on your clipboard for anywhere else.
 
-**choose what to take from each** (folded away in the panel) picks the parts per chat: last reply, what was asked, plan, files, notes. **write it with ai** merges everything into one short brief you can edit.
+Nothing rides in a link: VS Code drops long prompts from links, and it only resumes sessions it made itself. That is also why chats that an older Kroog started itself cannot be opened from Kroog; their profile says so, and **new chat from this** still works for them.
 
 The first time, VS Code asks "Allow 'Claude Code for VS Code' extension to open this URI?": tick "Do not ask me again" and press Open. If Kroog had to open the project folder through a link, macOS also asks whether to open the folder in Code: tick "Allow opening local paths without asking" and press Yes. Kroog avoids that second one when VS Code's own `code` command is installed (in VS Code: "Shell Command: Install 'code' command in PATH"); **Setup** says whether it was found.
 
