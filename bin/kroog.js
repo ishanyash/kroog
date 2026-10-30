@@ -28,9 +28,10 @@ import { createServer } from '../src/server.js';
 import { startDemo } from '../src/demo.js';
 import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
+import { EditorOpener } from '../src/editor.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -85,13 +86,14 @@ async function start({ demo }) {
   const notes = new NoteWriter({ store, getKey: () => (demo ? null : readApiKey()), getSettings: () => settings });
   // In the demo, an empty registry: no real chat is open, so "continue here" runs pretend turns.
   const presence = new Presence({ dir: demo ? fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kroog-demo-')) : nodePath.join(claudeDir(), 'sessions') });
-  const engine = new Engine({ store, getSettings: () => settings, notes, inbox: new Inbox({ file: demo ? null : p.inboxes }), presence });
+  const editorOpener = new EditorOpener({ demo });
+  const engine = new Engine({ store, getSettings: () => settings, notes, inbox: new Inbox({ file: demo ? null : p.inboxes }), presence, editor: editorOpener });
   // Readable titles for chats whose title was made from editor tags by older versions.
   if (!demo) for (const s of Object.values(store.data.sessions)) retitle(s);
   if (!demo) {
     try { if (refreshScript({ port })) console.log('Updated the hook relay script for this version of Kroog.'); } catch { /* not linked */ }
   }
-  const runner = new Runner({ store, engine, getSettings: () => settings, demo });
+  const runner = new Runner({ store, engine, getSettings: () => settings, demo, editor: editorOpener });
   const ai = new AiHelper({ store, engine, runner, getSettings: () => settings, getKey: () => (demo ? null : readApiKey()), demo });
   notes.ai = ai;
   // Suggested groups of chats about the same work, for the list page.
@@ -117,7 +119,7 @@ async function start({ demo }) {
     notesError: notes.lastError,
     claude: { ...runner.status(), registry: presence.available, open: presence.all().length },
     // Whether the editor's own command is installed (folders then open without a dialog).
-    editorCommand: demo ? true : Boolean(runner.editor.command(settings.defaultEditor || 'vscode')),
+    editorCommand: demo ? true : Boolean(editorOpener.command(settings.defaultEditor || 'vscode')),
     ai: ai.status(),
     groups: groups.status(),
     brain: brain.status(),
@@ -182,16 +184,17 @@ async function start({ demo }) {
     },
     // Open a chat, or a new chat with text typed in, in the editor: from Kroog itself, so the
     // browser never has to ask about opening vscode:// links. With a folder, that window opens first.
-    // Opens a chat (or a new one) in the editor, on its project folder. A short first
-    // message can ride along in the link; long ones go through the clipboard instead.
+    // Opens a chat in the editor, on its project folder; or a new chat there, with a first
+    // message sent into it through its inbox once it appears (the clipboard if it does not).
     'open-chat': async ({ editor, cwd, session, prompt } = {}) => {
       if (demo) return { demo: true, message: 'In the demo nothing opens. With your own chats this opens the editor.' };
       const ed = ['vscode', 'cursor', 'vscode-insiders', 'windsurf'].includes(editor) ? editor : settings.defaultEditor || 'vscode';
       const sid = String(session || '');
       if (sid && !/^[A-Za-z0-9_-]{6,80}$/.test(sid)) throw new Error('Bad chat id.');
-      const text = String(prompt || '').slice(0, 1500);
-      const r = await runner.editor.openChat(ed, { folder: String(cwd || ''), sessionId: sid, prompt: text });
-      return { url: r.url, folder: r.folder, command: Boolean(runner.editor.command(ed)) };
+      const text = String(prompt || '');
+      if (!sid && text) return engine.startInEditor({ editor: ed, cwd: String(cwd || ''), prompt: text, label: 'Your first message, from Kroog' });
+      const r = await editorOpener.openChat(ed, { folder: String(cwd || ''), sessionId: sid });
+      return { url: r.url, folder: r.folder, delivered: 'opened' };
     },
     // Write Library notes for one chat now (decisions, findings, how-tos, open questions).
     'notes-for': async ({ id } = {}) => {

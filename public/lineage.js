@@ -434,7 +434,7 @@ function chatNodeHtml(s, mode, ctx, early) {
   if (mode === 'mini') {
     // The state dot doubles as the live dot when the chat is open somewhere.
     const dot = live ? '<span class="dot live-dot" title="open now" aria-hidden="true"></span>' : '<span class="dot" aria-hidden="true"></span>';
-    return { cls: `${cls}${live ? ' live' : ''}`, label, tip: `${s.title || ''}${early ? ` (started ${fmtDay(early)})` : ''}${live ? ', open now' : ''}`, html: `${dot}${early ? '<span class="early-m" aria-hidden="true">←</span>' : ''}<span class="t">${esc(s.title || 'New chat')}</span>${kroog}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}${picked ? '<span class="pickmark">in brief</span>' : ''}` };
+    return { cls: `${cls}${live ? ' live' : ''}`, label, tip: `${s.title || ''}${early ? ` (started ${fmtDay(early)})` : ''}${live ? ', open now' : ''}`, html: `${dot}${early ? '<span class="early-m" aria-hidden="true">←</span>' : ''}<span class="t">${esc(s.title || 'New chat')}</span>${kroog}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s, true))}</span>${linkKey(s.id)}${picked ? '<span class="pickmark">in brief</span>' : ''}` };
   }
   const n = s.needs || {};
   const asking = s.status === 'needs' && n.kind === 'permission' && s.waitingPermission;
@@ -445,7 +445,7 @@ function chatNodeHtml(s, mode, ctx, early) {
   return {
     cls: `${cls}${live ? ' live' : ''}`,
     label,
-    html: `${earlyMark}<span class="st"><span class="w">${liveDot}${esc(lk.word)}${kroog}</span><span class="when"><span data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}</span></span>
+    html: `${earlyMark}<span class="st"><span class="w">${liveDot}${esc(lk.word)}${kroog}</span><span class="when"><span data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s, true))}</span>${linkKey(s.id)}</span></span>
       <span class="t">${esc(s.title || 'New chat')}</span>
       <span class="l">${esc(s.ai && s.ai.gist && lk.k !== 'working' && lk.k !== 'needs' ? s.ai.gist : lineText(s))}</span>
       ${cellsHtml(s)}${acts}${picked ? '<span class="pickmark">in brief</span>' : ''}`,

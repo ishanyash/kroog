@@ -15,6 +15,15 @@ import { Presence } from './presence.js';
 import { isJunkTitle, retitle } from './titles.js';
 import { tallyOf } from './store.js';
 import { copyText } from './clipboard.js';
+import { EditorOpener } from './editor.js';
+
+// The same folder, allowing a trailing slash and a workspace that is a parent or child of it.
+function sameFolder(a, b) {
+  const x = String(a || '').replace(/\/+$/, '');
+  const y = String(b || '').replace(/\/+$/, '');
+  if (!x || !y) return false;
+  return x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
+}
 
 const BRIEF_RE = /\[(?:Kroog|Crew) brief ([a-z0-9]{4,12})\]/i;
 // What the browser gets of a chat: the newest steps, and the last reply up to here.
@@ -42,10 +51,12 @@ function lowerFirst(text) {
 }
 
 export class Engine {
-  constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null, presence = null, copy = null }) {
+  constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null, presence = null, copy = null, editor = null }) {
     this.store = store;
     // Puts text on this Mac's clipboard (see clipboard.js); swapped out in tests.
     this.copy = copy || ((text) => copyText(text).catch(() => false));
+    // Opens folders and chats in VS Code or Cursor (see editor.js); swapped out in tests.
+    this.editor = editor || new EditorOpener({});
     // Each chat's Claude Code inbox, for messages from Kroog (see inbox.js).
     this.inbox = inbox || new Inbox();
     // Claude Code's own registry of open chats (see presence.js).
@@ -267,7 +278,8 @@ export class Engine {
             // When the brief itself is in the message (typed in from Kroog), only record it.
             if (!prompt.includes(brief.text.slice(0, 160))) context.push(brief.text);
             store.useBrief(brief.id, s.id);
-            if (fromUser && brief.goal && !s.turns) s.title = truncate(brief.goal, 80);
+            // A chat that starts with a brief is named after the brief's goal, however it got in.
+            if (brief.goal && !s.turns && (fromUser || isJunkTitle(s.title))) s.title = truncate(brief.goal, 80);
             this.recordInput(s, { kind: 'brief', brief: brief.id, from: (brief.sources || []).filter((id) => id !== s.id), notes: brief.notes || [], words: countWords(brief.text) });
             store.addStep(s, { kind: 'info', text: s.turns ? 'Got a brief from Kroog' : 'Started with a brief from Kroog' });
           }
@@ -577,7 +589,7 @@ export class Engine {
     const stepText = label || truncate(body, 400);
     if (!s) return { ok: false, error: 'That chat is gone.' };
     if (!body) return { ok: false, error: 'Type a message first.' };
-    if (body.length > 8000) return { ok: false, error: 'That message is too long. The limit is 8,000 characters.' };
+    if (body.length > 24000) return { ok: false, error: 'That message is too long. The limit is 24,000 characters.' };
 
     if (this.waiter(sid, 'stop')) {
       s.blockStreak = (s.blockStreak || 0) + 1;
@@ -723,10 +735,47 @@ export class Engine {
 
   // One entry point for Handoff: a brief made from chats and notes goes to a new chat,
   // a running chat, or project memory. Kroog records where it came from (lineage).
+  // A new chat in the editor that starts with `prompt`. The editor opens a fresh chat on the
+  // folder; the moment it shows up in Claude Code's registry, the text goes in through its
+  // inbox, as its first message. No prompt rides in the link (editors drop long ones) and
+  // no session is looked up (the editor only finds sessions it made itself). If no new chat
+  // appears within `wait`, the text goes on the clipboard instead, and the caller says so.
+  async startInEditor({ editor, cwd, prompt, label = '', wait = 45000 } = {}) {
+    const folder = String(cwd || '');
+    const body = String(prompt || '').trim();
+    if (!body) return { ok: false, error: 'Nothing to send.' };
+    this.presence.refresh();
+    const before = new Set(this.presence.all().map((e) => e.sid));
+    const opened = await this.editor.openChat(editor, { folder });
+    if (opened.folder === 'demo') return { ok: true, delivered: 'demo' };
+    const deadline = Date.now() + wait;
+    let found = null;
+    while (!found && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 500));
+      this.syncPresence();
+      for (const e of this.presence.all()) {
+        if (before.has(e.sid) || !e.socket || !e.token) continue;
+        if (folder && e.cwd && !sameFolder(e.cwd, folder)) continue;
+        const s = this.store.session(e.sid);
+        if (s && s.turns) continue;
+        found = e;
+        break;
+      }
+    }
+    if (found) {
+      const r = await this.send(found.sid, body, { label });
+      if (r.ok && r.delivered === 'inbox') return { ok: true, delivered: 'inbox', id: found.sid };
+    }
+    const copied = await this.copy(body);
+    return { ok: true, delivered: 'paste', id: found ? found.sid : null, copied };
+  }
+
   async handoff({ text, goal = '', target = 'new', editor, sessionId, cwd, sources = [], notes = [], run = 'editor' } = {}) {
-    // Note: `run` for a new chat is 'editor' (Kroog starts it with the context, Haiku replies
-    // with what it understood, then the editor opens on it) or 'typed' (the context goes on
-    // the clipboard and a plain new chat opens: paste, press Enter). 'kroog' keeps it here.
+    // `run` for a new chat: 'inbox' (the default: a fresh chat opens in the editor and the
+    // context goes in through its inbox as the first message; the clipboard if that fails),
+    // 'typed' (the context goes on the clipboard and a plain new chat opens: paste, press
+    // Enter), 'editor' (Kroog runs the first turn on Haiku, then opens the chat in the
+    // editor) or 'kroog' (keep it here).
     const body = String(text || '').trim();
     if (!body) return { ok: false, error: 'The brief is empty. Tick at least one thing to send.' };
     const from = uniq(Array.isArray(sources) ? sources.map(String) : []);
@@ -740,6 +789,14 @@ export class Engine {
       if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
       const goalLine = String(goal || '').trim();
       return this.runner.run({ mode: 'new', cwd: folder, prompt: promptFor(), title: goalLine ? truncate(goalLine, 80) : '', input, label: goalLine ? `${truncate(goalLine, 200)} (with a brief from Kroog)` : 'Started with a brief from Kroog' });
+    }
+    if (target === 'new' && run === 'inbox') {
+      const folder = String(cwd || '');
+      if (!folder) return { ok: false, error: 'Pick a project folder for the new chat.' };
+      const made = this.createBrief({ text: body, goal, editor, sources: from, notes: noteIds, typed: true });
+      const names = from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
+      const r = await this.startInEditor({ editor, cwd: folder, prompt: made.prompt, label: names.length ? `Started with the context from ${names.join(' and ')}` : 'Started with the context from Kroog' });
+      return { ...made, ...r, cwd: folder };
     }
     // The brief on the clipboard, for a new chat in the editor: nothing runs until you paste
     // it and press Enter. (A link can carry a prompt too, but editors drop long ones.)

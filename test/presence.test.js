@@ -68,3 +68,69 @@ test('titles made from editor tags are replaced, and empty chats are spotted', (
   assert.equal(isEmptyChat({ status: 'done', lastPrompt: 'hi', lastReply: 'hello', steps: [] }), false);
   assert.equal(isEmptyChat({ status: 'working', lastPrompt: '', lastReply: '', steps: [] }), false);
 });
+
+// A new chat in the editor, fed through its inbox: Kroog opens the editor, the chat shows up
+// in the registry, and the context goes in as its first message.
+test('a new chat in the editor gets the context through its inbox once it appears in the registry', async () => {
+  const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
+  const socket = path.join(sockDir, 'new.sock');
+  const got = [];
+  const server = net.createServer((c) => { let buf = ''; c.on('data', (d) => { buf += d; }); c.on('end', () => got.push(buf)); });
+  await new Promise((r) => server.listen(socket, r));
+  const dir = registry([]);
+  const store = new Store();
+  const opened = [];
+  const copied = [];
+  const editor = {
+    // When the editor "opens" a new chat, Claude Code writes it into the registry a moment later.
+    openChat: async (ed, opts) => {
+      opened.push({ ed, ...opts });
+      setTimeout(() => {
+        fs.writeFileSync(path.join(dir, `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: 'fresh-1', cwd: '/Users/me/code/app', entrypoint: 'claude-vscode', status: 'idle', statusUpdatedAt: Date.now(), startedAt: Date.now(), messagingSocketPath: socket }));
+        fs.writeFileSync(path.join(dir, `${process.pid}.k.key`), JSON.stringify({ peerToken: 'tok' }), { mode: 0o600 });
+      }, 300);
+      return { ok: true, url: 'vscode://anthropic.claude-code/open', folder: 'command' };
+    },
+    openFolder: () => ({ ok: true, how: 'command' }),
+    command: () => '/usr/local/bin/code',
+  };
+  const engine = new Engine({ store, getSettings: () => ({}), presence: new Presence({ dir }), editor, copy: async (t) => { copied.push(t); return true; } });
+  try {
+    await engine.handle('UserPromptSubmit', { session_id: 'a', cwd: '/Users/me/code/app', prompt: 'Find the cost' }, { entry: 'claude-vscode' });
+    const r = await engine.handoff({ text: 'CONTEXT: about £38 a week.', goal: 'Write the FAQ', target: 'new', run: 'inbox', editor: 'vscode', cwd: '/Users/me/code/app/', sources: ['a'] });
+    assert.equal(r.ok, true, r.error);
+    assert.equal(r.delivered, 'inbox');
+    assert.equal(r.id, 'fresh-1');
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].folder, '/Users/me/code/app/');
+    assert.equal(opened[0].sessionId, undefined, 'no session in the link: the editor makes a fresh chat');
+    assert.ok(await new Promise((res) => { const t = setInterval(() => { if (got.length) { clearInterval(t); res(true); } }, 20); setTimeout(() => { clearInterval(t); res(false); }, 3000); }), 'the message reached the inbox');
+    const lines = got[0].trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepEqual(lines[0], { type: 'auth', token: 'tok' });
+    assert.match(lines[1].message.content, /^Message from the user, sent from Kroog/);
+    assert.match(lines[1].message.content, /Write the FAQ\n\nCONTEXT: about £38 a week\.\n\n\[Kroog brief [a-z0-9]+\]/);
+    const s = store.session('fresh-1');
+    assert.equal(s.status, 'working');
+    assert.ok(s.steps.some((st) => st.kind === 'you' && /Started with the context from "Find the cost"/.test(st.text)));
+    assert.deepEqual(copied, [], 'nothing on the clipboard when the inbox took it');
+    // The hook then sees the message come back with the tag: lineage recorded, title from the goal.
+    const out = await engine.handle('UserPromptSubmit', { session_id: 'fresh-1', cwd: '/Users/me/code/app', prompt: lines[1].message.content }, { entry: 'claude-vscode' });
+    assert.equal(out, null);
+    assert.deepEqual(s.inputs.find((x) => x.kind === 'brief').from, ['a']);
+    assert.equal(s.title, 'Write the FAQ');
+  } finally {
+    server.close();
+  }
+});
+
+test('when no new chat shows up, the context goes on the clipboard instead', async () => {
+  const dir = registry([]);
+  const store = new Store();
+  const copied = [];
+  const editor = { openChat: async () => ({ ok: true, url: 'x', folder: 'link' }), openFolder: () => ({ ok: true, how: 'link' }), command: () => null };
+  const engine = new Engine({ store, getSettings: () => ({}), presence: new Presence({ dir }), editor, copy: async (t) => { copied.push(t); return true; } });
+  const r = await engine.startInEditor({ editor: 'vscode', cwd: '/Users/me/code/app', prompt: 'Hello there', wait: 700 });
+  assert.equal(r.delivered, 'paste');
+  assert.equal(r.copied, true);
+  assert.deepEqual(copied, ['Hello there']);
+});

@@ -33,13 +33,18 @@ export function clock(t) {
   return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AP])M$/i, (m, x) => ` ${x.toLowerCase()}m`);
 }
 
-export function dayish(t) {
+// A moment you can place: "today, 1:43 pm", "yesterday, 1:43 pm", "27 oct, 1:43 pm", and
+// the year once it is not this one. `short` leaves out the time on other days and the word
+// "today" (for the week view, where the column already says the day).
+export function dayish(t, short = false) {
+  if (!t) return '';
   const d = new Date(t);
   const today = new Date();
   const yesterday = new Date(Date.now() - 86400000);
-  if (d.toDateString() === today.toDateString()) return clock(t);
-  if (d.toDateString() === yesterday.toDateString()) return 'yesterday';
-  return d.toLocaleDateString([], { weekday: 'long' }).toLowerCase();
+  if (d.toDateString() === today.toDateString()) return short ? clock(t) : `today, ${clock(t)}`;
+  if (d.toDateString() === yesterday.toDateString()) return short ? 'yesterday' : `yesterday, ${clock(t)}`;
+  const day = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(d.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }) }).toLowerCase();
+  return short ? day : `${day}, ${clock(t)}`;
 }
 
 export function countdownText(deadline, what = 'the editor asks') {
@@ -84,12 +89,13 @@ export function look(s) {
   return { k: 'done', word: 'done' };
 }
 
-export function whenText(s) {
+// When a chat last did something: how long it has been waiting or working, otherwise the
+// moment it was last used, with its day.
+export function whenText(s, short = false) {
   const b = bucket(s);
   if (b === 'needs') return dur(s.since);
   if (b === 'working') return dur(s.since);
-  if (Date.now() - (s.lastAt || 0) > QUIET_AFTER) return dayish(s.lastAt);
-  return clock(s.lastAt || s.since);
+  return dayish(s.lastAt || s.since, short);
 }
 
 export function firstLine(text, n = 160) {

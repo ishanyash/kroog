@@ -14,7 +14,7 @@ const UI = {
   logOpen: false,
   demoSeen: false,
   list: { filter: 'all', query: '' },
-  handoff: { active: false, sources: [], notes: [], goal: '', target: 'new', editor: '', runTarget: '', memoryCwd: '', short: false, run: 'seed', newCwd: '', aiText: null, aiBusy: false },
+  handoff: { active: false, sources: [], notes: [], goal: '', target: 'new', editor: '', runTarget: '', memoryCwd: '', short: false, run: 'inbox', newCwd: '', aiText: null, aiBusy: false },
   // A new chat started from a lane's "+ new chat".
   newChat: null,
   hover: null,
@@ -77,6 +77,10 @@ function toast(message, ms = 4200) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, ms);
 }
+function hideToast() {
+  clearTimeout(toastTimer);
+  $('#toast').hidden = true;
+}
 
 async function act(promise, okMessage) {
   try {
@@ -94,7 +98,7 @@ function openUrl(url) {
   window.location.href = url;
 }
 
-// Open a chat (or a new chat with text typed in) in the editor. Kroog opens it from the Mac
+// Open a chat in the editor (a new one, or an existing one by id). Kroog opens it from the Mac
 // itself when it can, so the browser never asks about vscode:// links; with a folder, that
 // window opens first.
 async function openInEditor({ editor, cwd, session, prompt } = {}) {
@@ -329,7 +333,7 @@ function connectTo(targetId, newCwd = '') {
   const sources = (UI.linking && UI.linking.sources) || [];
   UI.linking = null;
   const h = UI.handoff;
-  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: newCwd ? 'new' : 'running', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: newCwd ? '' : targetId, memoryCwd: '', short: false, run: h.run || 'seed', newCwd, aiText: null, aiBusy: false, extra: h.extra || [] };
+  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: newCwd ? 'new' : 'running', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: newCwd ? '' : targetId, memoryCwd: '', short: false, run: h.run || 'inbox', newCwd, aiText: null, aiBusy: false, extra: h.extra || [] };
   for (const id of sources) addSource(id);
   UI.selected = null;
   UI.newChat = null;
@@ -433,7 +437,7 @@ function newChatHtml() {
       <div class="where"><span>${esc(tildePath(cwd))}</span></div></div>
     <div class="side-body">
       <div class="field"><label for="nc-text">First message (optional)</label><textarea id="nc-text" rows="6" placeholder="For example: add a test for the weekly cost model">${esc(UI.newChat.text || '')}</textarea></div>
-      <p class="quiet">Opens ${esc(EDITORS[ed] || 'VS Code')} on this folder with a new Claude Code chat, your message typed in. To start from what other chats worked out, use the link key on those chats instead.</p>
+      <p class="quiet">Opens ${esc(EDITORS[ed] || 'VS Code')} on this folder with a new Claude Code chat. Your message, if you give one, goes in as soon as the chat is there. To start from what other chats worked out, use the link key on those chats instead.</p>
     </div>
     <div class="side-foot"><div class="row end"><button type="button" class="btn solid" id="nc-editor">open in ${esc(EDITORS[ed] || 'VS Code')}</button></div></div>`;
 }
@@ -732,7 +736,7 @@ function toggleSource(id) {
 // brief wired to them, and the panel is ready to send.
 function startHandoffFrom(ids, cwd = '') {
   const h = UI.handoff;
-  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: 'new', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: '', memoryCwd: '', short: false, run: h.run || 'seed', newCwd: cwd, aiText: null, aiBusy: false, extra: [] };
+  UI.handoff = { active: true, sources: [], notes: [], goal: '', target: 'new', editor: h.editor || S.settings.defaultEditor || 'vscode', runTarget: '', memoryCwd: '', short: false, run: h.run || 'inbox', newCwd: cwd, aiText: null, aiBusy: false, extra: [] };
   for (const id of ids) addSource(id);
   UI.selected = null;
   UI.newChat = null;
@@ -753,7 +757,7 @@ function startHandoff(fromId) {
 }
 
 function endHandoff() {
-  UI.handoff = { active: false, sources: [], notes: [], goal: '', target: 'new', editor: UI.handoff.editor, runTarget: '', memoryCwd: '', short: false, run: UI.handoff.run || 'seed', newCwd: '', aiText: null, aiBusy: false, extra: [] };
+  UI.handoff = { active: false, sources: [], notes: [], goal: '', target: 'new', editor: UI.handoff.editor, runTarget: '', memoryCwd: '', short: false, run: UI.handoff.run || 'inbox', newCwd: '', aiText: null, aiBusy: false, extra: [] };
   renderAll(false);
 }
 
@@ -812,10 +816,6 @@ function briefPanelHtml() {
   }
   const editor = h.editor || 'vscode';
   const count = h.sources.length + h.notes.length + (h.extra || []).length;
-  // How the new chat starts: 'typed' = the editor opens with the context typed in, you press
-  // Enter; 'seed' = Kroog runs the first turn (Claude reads the context and replies), then the
-  // editor opens on it.
-  const how = h.run === 'seed' && canRun() ? 'seed' : 'typed';
   if (!h.newCwd || !folders.includes(h.newCwd)) h.newCwd = h.memoryCwd || folders[0] || '';
 
   // The sources as a short list; what to take from each is folded away (the defaults are
@@ -848,16 +848,10 @@ function briefPanelHtml() {
   let destFields = '';
   if (h.target === 'new') {
     const edLabel = EDITORS[editor] || 'VS Code';
-    const howSeg = canRun()
-      ? `<div class="field"><span class="label">How it starts</span><div class="seg" role="group" aria-label="How the new chat starts"><button type="button" data-run="seed" aria-pressed="${how === 'seed'}">Claude reads it first</button><button type="button" data-run="typed" aria-pressed="${how === 'typed'}">I paste it myself</button></div></div>`
-      : '';
     destFields = `<div class="field"><label for="ho-goal">Goal for the new chat</label><textarea id="ho-goal" rows="3" placeholder="For example: write the post on dbt tests and cost gates">${esc(h.goal)}</textarea></div>
       <div class="field"><label for="ho-newcwd">In project folder</label><select id="ho-newcwd">${folders.map((f) => `<option value="${esc(f)}" ${f === h.newCwd ? 'selected' : ''}>${esc(folderName(f))}</option>`).join('')}</select></div>
       <div class="field"><label for="ho-editor">Open it in</label><select id="ho-editor">${Object.entries(EDITORS).map(([k, v]) => `<option value="${k}" ${k === editor ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-      ${howSeg}
-      <p class="quiet">${how === 'seed'
-        ? `Kroog starts the chat in that folder with the context as its first message. Haiku reads it and replies in a few lines with what it understood (a few seconds), then ${esc(edLabel)} opens on the chat and you carry on there.`
-        : `${esc(edLabel)} opens on that folder with a new, empty chat, and the context is on your clipboard. Paste it there and press Enter. Nothing runs before that.`}</p>`;
+      <p class="quiet">${esc(edLabel)} opens a new chat on that folder, and Kroog sends the context into it as its first message. The chat starts reading it there. If Kroog cannot reach the new chat within half a minute, the context goes on your clipboard instead and Kroog says so.</p>`;
   } else if (h.target === 'running') {
     const t = S.sessions.get(h.runTarget);
     let note = '';
@@ -872,7 +866,7 @@ function briefPanelHtml() {
       : '<p class="quiet">No project folders yet.</p>';
   }
   const sendLabel = h.target === 'new' ? `open a new chat in ${EDITORS[editor] || 'VS Code'}` : h.target === 'running' ? 'send the brief' : 'add to project memory';
-  const disabled = !count || h.aiBusy || (h.target === 'running' && !live.length) || (h.target === 'memory' && !folders.length) || (h.target === 'new' && !h.newCwd);
+  const disabled = !count || h.aiBusy || h.sending || (h.target === 'running' && !live.length) || (h.target === 'memory' && !folders.length) || (h.target === 'new' && !h.newCwd);
   const aiRow = aiOn()
     ? `<div class="row ai-row"><button type="button" class="btn sm soft" id="ho-ai" ${h.aiBusy || !count ? 'disabled' : ''}>${h.aiBusy ? 'writing' : h.aiText != null ? 'write it again' : 'write it with ai'}</button>${h.aiText != null ? '<button type="button" class="linkish quiet" id="ho-ai-reset">use the plain version</button>' : '<span class="quiet">merges the chats into one short brief</span>'}</div>`
     : '';
@@ -891,13 +885,16 @@ function briefPanelHtml() {
       ${aiRow}
       ${previewHtml}
     </div>
-    <div class="composer"><div class="row"><button type="button" class="btn soft" id="ho-copy">copy</button><button type="button" class="btn solid" id="ho-send" ${disabled ? 'disabled' : ''}>${esc(sendLabel)}</button></div></div>`;
+    <div class="composer"><div class="row"><button type="button" class="btn soft" id="ho-copy">copy</button><button type="button" class="btn solid" id="ho-send" ${disabled ? 'disabled' : ''}>${h.sending ? 'opening' : esc(sendLabel)}</button></div></div>`;
 }
 
 async function sendHandoff() {
   const h = UI.handoff;
+  if (h.sending) return;
   const text = briefText();
-  const how = h.run === 'seed' && canRun() ? 'seed' : 'typed';
+  if (h.target === 'new') toast(`Opening ${EDITORS[h.editor] || 'VS Code'} with a new chat. The context goes in as soon as the chat is there (up to a minute if VS Code has to start).`, 50000);
+  h.sending = true;
+  renderAll(false);
   const r = await act(post('handoff', {
     text,
     goal: h.goal,
@@ -907,13 +904,34 @@ async function sendHandoff() {
     cwd: h.target === 'new' ? h.newCwd : h.memoryCwd,
     sources: h.sources.map((x) => x.id),
     notes: h.notes,
-    run: h.target === 'new' ? (how === 'seed' ? 'editor' : 'typed') : 'editor',
+    run: h.target === 'new' ? 'inbox' : 'editor',
   }));
-  if (!r) return;
+  h.sending = false;
+  if (!r) { hideToast(); renderAll(false); return; }
   const target = S.sessions.get(h.runTarget);
+  if (r.delivered === 'inbox' && h.target === 'new') {
+    toast(`The context went into the new chat in ${EDITORS[h.editor] || 'VS Code'}. It is reading it there now.`, 8000);
+    endHandoff();
+    if (r.id) { UI.selected = r.id; renderAll(false); if (UI.route === 'lineage') setTimeout(() => reveal(r.id, true), 150); }
+    return;
+  }
   if (r.delivered === 'inbox') {
     toast(`Sent. The brief went straight into "${trim((target && target.title) || 'the chat', 40)}".`, 7000);
     endHandoff();
+    return;
+  }
+  if (r.delivered === 'demo') {
+    toast('In the demo nothing opens. With your own chats, VS Code opens a new chat and the context goes in as its first message.', 8000);
+    endHandoff();
+    return;
+  }
+  if (r.delivered === 'paste' && h.target === 'new') {
+    let copied = Boolean(r.copied);
+    if (!copied) { try { await navigator.clipboard.writeText(r.prompt); copied = true; } catch { /* no clipboard here */ } }
+    toast(copied
+      ? `${EDITORS[h.editor] || 'VS Code'} opened a new chat, but Kroog could not reach it. The context is on your clipboard: paste it there and press Enter.`
+      : `${EDITORS[h.editor] || 'VS Code'} opened a new chat, but Kroog could not reach it. Press copy below, then paste the context there and press Enter.`, 12000);
+    if (copied) endHandoff();
     return;
   }
   if (r.delivered === 'typed') {
@@ -1342,7 +1360,6 @@ document.addEventListener('click', async (e) => {
     return;
   }
   if (d.newchatCancel !== undefined) { UI.newChat = null; renderAll(false); return; }
-  if (d.run) { UI.handoff.run = d.run; renderAll(false); return; }
   if (d.summarize) { wantSummary(S.sessions.get(d.summarize), true); return; }
   if (d.unextra !== undefined) { UI.handoff.extra.splice(Number(d.unextra), 1); UI.handoff.aiText = null; renderAll(false); return; }
   if (d.unsource) { UI.handoff.aiText = null; UI.handoff.sources = UI.handoff.sources.filter((x) => x.id !== d.unsource); renderAll(false); return; }
@@ -1376,11 +1393,16 @@ document.addEventListener('click', async (e) => {
     case 'nc-editor': {
       const text = (($('#nc-text') || {}).value || '').trim();
       const ed = S.settings.defaultEditor || 'vscode';
-      // Editors drop long messages from a link, so those go through the clipboard.
-      const long = text.length > 1200;
-      if (long) { try { await navigator.clipboard.writeText(text); } catch { /* ignore */ } }
-      await openInEditor({ editor: ed, cwd: UI.newChat.cwd, prompt: long ? '' : text });
-      toast(`Opening ${EDITORS[ed] || 'VS Code'} on ${folderName(UI.newChat.cwd)} with a new chat${long ? '. Your message is on the clipboard: paste it there' : text ? ', your message typed in' : ''}.`, 7000);
+      const name = EDITORS[ed] || 'VS Code';
+      if (text) toast(`Opening ${name} with a new chat. Your message goes in as soon as the chat is there.`, 30000);
+      let r = null;
+      try { r = await post('open-chat', { editor: ed, cwd: UI.newChat.cwd, prompt: text }); } catch (error) { toast(error.message, 8000); break; }
+      if (r.demo) toast(r.message, 6000);
+      else if (r.delivered === 'inbox') toast(`Your message went into the new chat in ${name}.`, 7000);
+      else if (r.delivered === 'paste') {
+        if (!r.copied) { try { await navigator.clipboard.writeText(text); } catch { /* ignore */ } }
+        toast(`${name} opened a new chat, but Kroog could not reach it. Your message is on the clipboard: paste it there and press Enter.`, 12000);
+      } else toast(`Opening ${name} on ${folderName(UI.newChat.cwd)} with a new chat.`, 6000);
       UI.newChat = null;
       renderAll(false);
       break;
@@ -1526,7 +1548,7 @@ setInterval(() => {
   }
   for (const el of $$('[data-tick="when"]')) {
     const s = S.sessions.get(el.dataset.id);
-    if (s) el.textContent = whenText(s);
+    if (s) el.textContent = whenText(s, el.closest('.stage') != null);
   }
   for (const el of $$('[data-tick="clock"]')) el.textContent = clock(Date.now());
 }, 1000);

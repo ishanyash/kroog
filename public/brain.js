@@ -2,6 +2,7 @@
 // meaning and by keyword. The app calls renderBrain() on every live update, so this keeps
 // its own state and only redraws the parts that changed (your typing is never interrupted).
 import { mountBrainMap } from './brainmap.js';
+import { dayish } from './util.js';
 
 const KIND_LABEL = {
   instructions: 'instructions',
@@ -260,13 +261,6 @@ function textHtml(text, esc) {
   return String(text || '').split('\n').map((line) => (/^#{1,6}\s/.test(line) ? `<b>${esc(line.replace(/^#+\s*/, ''))}</b>` : esc(line))).join('\n');
 }
 
-function dayish(t) {
-  if (!t) return '';
-  const d = new Date(t);
-  const now = new Date();
-  const same = d.toDateString() === now.toDateString();
-  return same ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase() : d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }).toLowerCase();
-}
 
 async function showDetail(node) {
   B.selected = node;

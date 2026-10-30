@@ -37,7 +37,7 @@ Keep the Terminal window with `start` open while you use Kroog. To update later,
 
 ### The week view
 
-- Each column is a day, Monday to Sunday. Move between weeks with ‹ and › at the top, or with the ← and → keys.
+- Each column is a day, Monday to Sunday. Move between weeks with ‹ and › at the top, or with the ← and → keys. Times on the week view are just times, because the column says the day; everywhere else a time comes with its day ("today, 1:43 pm", "yesterday, 1:43 pm", "27 oct, 1:43 pm").
 - Each project is a band, and each box is a chat, placed on the day it started.
 - A dashed line runs from a chat to the last day it was used.
 - Lines between chats show where they came from:
@@ -82,15 +82,17 @@ When a chat asks to edit a file or run a command, the question shows at the top 
 
 1. Take a suggested group on the **list** page (**new chat from these**), or click the small link key on a chat and add more chats with their keys, or press **new chat from this** in a profile.
 2. The panel lists the chats. Add a goal if you have one, pick the project folder, and press **open a new chat in VS Code**.
-3. Kroog starts the chat in that folder with the context as its first message ("Context from Kroog, the map of my Claude Code chats: what earlier chats on this work established…"). Haiku reads it and replies in a few lines with what it understood; that takes a few seconds. Then VS Code opens on the chat and you carry on there. Kroog draws the lines from the old chats to the new one.
+3. VS Code opens a new chat on that folder. The moment it appears in Claude Code's registry, Kroog sends the context into it through the chat's own inbox, so the context is the chat's first message ("Message from the user, sent from Kroog… Context from Kroog, the map of my Claude Code chats: what earlier chats on this work established…") and the chat starts reading it there. Kroog draws the lines from the old chats to the new one, and names it after your goal.
 
-If you would rather nothing runs before you say so, pick **I paste it myself**: VS Code opens a new, empty chat on that folder and the context is on your clipboard. Paste it and press Enter.
+If no new chat shows up within half a minute (VS Code was slow, or the chat opened on another folder), Kroog puts the context on your clipboard and says so: paste it into the chat and press Enter.
+
+Nothing rides in the link itself: VS Code drops long prompts from links, and it only finds sessions it made itself, which is why earlier versions ended up with an empty chat.
 
 **choose what to take from each** (folded away in the panel) picks the parts per chat: last reply, what was asked, plan, files, notes. **write it with ai** merges everything into one short brief you can edit.
 
-The first time, your Mac asks twice. VS Code asks "Allow 'Claude Code for VS Code' extension to open this URI?": tick "Do not ask me again" and press Open. If Kroog had to open the project folder through a link, macOS asks whether to open the folder in Code: tick "Allow opening local paths without asking" and press Yes. Kroog avoids the second one when VS Code's own `code` command is installed (in VS Code: "Shell Command: Install 'code' command in PATH"); **Setup** says whether it was found.
+The first time, VS Code asks "Allow 'Claude Code for VS Code' extension to open this URI?": tick "Do not ask me again" and press Open. If Kroog had to open the project folder through a link, macOS also asks whether to open the folder in Code: tick "Allow opening local paths without asking" and press Yes. Kroog avoids that second one when VS Code's own `code` command is installed (in VS Code: "Shell Command: Install 'code' command in PATH"); **Setup** says whether it was found.
 
-**+ new chat** on a project band opens a plain new chat in VS Code on that folder, with an optional first message.
+**+ new chat** on a project band opens a plain new chat in VS Code on that folder; a first message, if you give one, goes in the same way.
 
 ### Chats about the same work
 
@@ -140,11 +142,11 @@ Add `--port 4878` to `link` and `start` to use another port.
 
 - **Hooks.** `link` adds hooks to Claude Code's settings. Each one runs `~/.kroog/hook.sh`, which tells Kroog what the chat is doing and where its inbox is. When Kroog isn't running, the hook gives up in a moment and changes nothing.
 - **The registry.** Claude Code keeps a list of its running chats in `~/.claude/sessions/` (id, folder, busy or idle, inbox). Kroog reads it every few seconds. That's how a chat opened before Kroog started still shows as open.
-- **Sending context into an open chat** uses that chat's inbox, a private socket Claude Code opens for each chat. In the editor it arrives as a message from another session, so it can never approve anything for you.
+- **Sending context into a chat** uses that chat's inbox, a private socket Claude Code opens for each chat. In the editor it arrives as a message from another session, so it can never approve anything for you. A new chat from Kroog works the same way: VS Code opens it, the registry shows it, and the context goes in.
 - **Inboxes.** Since Claude Code 2.1.224, every chat has a private inbox, a socket only your user can reach. Kroog sends your messages and briefs there.
 - **Conversations.** The conversation shown in a chat's panel comes from Claude Code's own history file for that chat.
 - **What the page gets.** The browser gets each chat's newest 40 steps and the counts of the rest, not the whole chat, and a working chat's updates a few times a second at most. Kroog saves its state at most every 5 seconds, off the main thread. With a few hundred chats, the earlier way of doing all three was what made it slow.
-- **Claude Code on your Mac.** The AI helper and "Claude reads it first" use Claude Code itself (`claude -p`), with your usual login, settings and permission rules. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
+- **Claude Code on your Mac.** The AI helper uses Claude Code itself (`claude -p`, with Haiku), with your usual login and settings. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
 
 ## Safety
 
