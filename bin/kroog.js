@@ -230,8 +230,11 @@ async function start({ demo }) {
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
       whoIsOn(port).then((who) => {
-        if (who) console.error(`${who.name} ${who.version} is already running on port ${port}${who.pid ? ` (process ${who.pid})` : ''}.`);
-        else console.error(`Port ${port} is busy, and it does not answer like Kroog.`);
+        const l = listenerOnPort(port);
+        if (who) console.error(`${who.name} ${who.version} is already running on port ${port}${(who.pid || (l && l.pid)) ? ` (process ${who.pid || l.pid})` : ''}.`);
+        else if (l && looksLikeOurs(l.command)) console.error(`An older Crew or Kroog holds port ${port} but is not answering (process ${l.pid}: ${l.command}).`);
+        else if (l) console.error(`Port ${port} is used by another program (process ${l.pid}: ${l.command}).`);
+        else console.error(`Port ${port} is busy, and Kroog could not see by what.`);
         console.error(`To stop it and start this version: node bin/kroog.js stop && node bin/kroog.js start`);
         console.error('Or run on another port with --port 4878 (then run link again with the same --port).');
         process.exit(1);
@@ -324,34 +327,62 @@ async function whoIsOn(port) {
 }
 
 function pidOnPort(port) {
+  const l = listenerOnPort(port);
+  return l ? l.pid : null;
+}
+
+// The process listening on the port, with its command line (macOS and Linux).
+function listenerOnPort(port) {
+  let out = '';
   try {
-    const out = execFileSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8', timeout: 5000 });
-    const pid = Number(out.trim().split('\n')[0]);
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
+    out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fpc'], { encoding: 'utf8', timeout: 5000 });
   } catch {
     return null;
   }
+  const pid = Number((out.match(/^p(\d+)/m) || [])[1]);
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  let command = (out.match(/^c(.+)/m) || [])[1] || '';
+  try { command = execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8', timeout: 5000 }).trim() || command; } catch { /* keep the short name */ }
+  return { pid, command };
+}
+
+const looksLikeOurs = (command) => /(crew|kroog)\.js|[\\/]\.?(crew|kroog)[\\/]|\bcrew\b|\bkroog\b/i.test(String(command || ''));
+
+async function endProcess(pid, label) {
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+  let until = Date.now() + 4000;
+  while (alive() && Date.now() < until) await new Promise((r) => setTimeout(r, 200));
+  if (alive()) {
+    // Hung: no more waiting.
+    try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+    until = Date.now() + 2000;
+    while (alive() && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
+  }
+  console.log(alive() ? `Could not stop ${label} (process ${pid}). Try: kill -9 ${pid}` : `Stopped ${label} (process ${pid}).`);
 }
 
 async function stop() {
   const settings = loadSettings();
   const port = Number(option('port') || settings.port || DEFAULT_SETTINGS.port);
   const who = await whoIsOn(port);
-  if (!who) {
-    console.log(`Nothing that looks like Kroog is running on port ${port}.`);
+  const l = listenerOnPort(port);
+  if (who && (who.pid || (l && l.pid))) {
+    await endProcess(who.pid || l.pid, `${who.name} ${who.version}`);
     return;
   }
-  if (!who.pid) {
-    console.log(`${who.name} ${who.version} is running on port ${port}, but its process could not be found. Press Ctrl+C in its Terminal window.`);
+  if (!l) {
+    console.log(`Nothing is listening on port ${port}. Kroog is not running.`);
     return;
   }
-  process.kill(who.pid, 'SIGTERM');
-  const until = Date.now() + 5000;
-  while (Date.now() < until) {
-    try { process.kill(who.pid, 0); } catch { console.log(`Stopped ${who.name} ${who.version} (process ${who.pid}).`); return; }
-    await new Promise((r) => setTimeout(r, 200));
+  if (looksLikeOurs(l.command) || flag('force')) {
+    await endProcess(l.pid, looksLikeOurs(l.command) ? 'an older Crew or Kroog that was not answering' : `the process on port ${port}`);
+    return;
   }
-  console.log(`Asked ${who.name} ${who.version} (process ${who.pid}) to stop. If it is still running, press Ctrl+C in its window.`);
+  console.log(`Port ${port} is used by another program, so Kroog left it alone:`);
+  console.log(`  process ${l.pid}: ${l.command}`);
+  console.log(`To stop it anyway: node bin/kroog.js stop --force   (or: kill ${l.pid})`);
+  console.log('Or run Kroog on another port: node bin/kroog.js link --port 4878 && node bin/kroog.js start --port 4878');
 }
 
 function status() {
