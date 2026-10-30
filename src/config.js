@@ -66,6 +66,7 @@ export function paths() {
     env: path.join(home, '.env'),
     hookScript: path.join(home, 'hook.sh'),
     inboxes: path.join(home, 'inboxes.json'),
+    usage: path.join(home, 'usage.jsonl'),
     backups: path.join(home, 'backups'),
     claudeSettings: path.join(claudeDir(), 'settings.json'),
   };

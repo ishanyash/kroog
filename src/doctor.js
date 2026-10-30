@@ -7,6 +7,7 @@ import { paths, loadSettings, claudeDir } from './config.js';
 import { linkStatus, hasOldCrewHooks } from './link.js';
 import { findClaude, claudeVersion } from './claude-cli.js';
 import { Presence } from './presence.js';
+import { modStatus, installLine } from './mod.js';
 
 // Claude Code gives each chat an inbox from this version on.
 export const INBOX_VERSION = '2.1.224';
@@ -104,6 +105,18 @@ export async function doctor({ version = '' } = {}) {
   const last = Object.values(state.lastEvents || {}).sort((a, b) => b - a)[0];
   if (last) ok(`Last event from a chat: ${Math.round((Date.now() - last) / 60000)} min ago`);
   else bad('No events from any chat yet', 'Use a chat in VS Code while Kroog runs');
+
+  // 6. The mod that sends plan usage, and the last reading it sent.
+  const mod = await modStatus({ claudePath: settings.claudePath || '' });
+  if (mod.installed) ok(`The Kroog mod is installed (${mod.version}), so chats send their plan usage`, mod.from);
+  else bad('The Kroog mod is not installed, so Kroog cannot show plan usage', `Run: node bin/kroog.js link. Or in a chat: ${installLine()}`);
+  let lastReading = null;
+  try {
+    const lines = fs.readFileSync(p.usage, 'utf8').trim().split('\n');
+    lastReading = JSON.parse(lines[lines.length - 1]);
+  } catch { /* none */ }
+  if (lastReading && lastReading.t) ok(`Last plan usage reading: ${Math.round((Date.now() - lastReading.t) / 60000)} min ago`, Object.entries(lastReading.windows || {}).map(([k, w]) => `${k.replace('_', ' ')} ${w.pct}%`).join(', ') || 'no windows in it (not a claude.ai plan?)');
+  else if (mod.installed) ok('No plan usage reading yet', 'A chat sends one after its first reply (open chats after a restart or /reload-plugins)');
 
   return { version, checks, claudeDir: claudeDir(), home: p.home };
 }

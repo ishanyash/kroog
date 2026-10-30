@@ -29,9 +29,13 @@ import { startDemo } from '../src/demo.js';
 import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
 import { EditorOpener } from '../src/editor.js';
+import { Usage } from '../src/usage.js';
+import { CostBook } from '../src/cost.js';
+import { burnReport } from '../src/burn.js';
+import { modStatus, installMod, uninstallMod, installLine } from '../src/mod.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -98,6 +102,12 @@ async function start({ demo }) {
   notes.ai = ai;
   // Suggested groups of chats about the same work, for the list page.
   const groups = new Groups({ store, ai, getSettings: () => settings });
+  // Plan usage from the mod, and each chat's cost from its transcript.
+  const usage = new Usage({ file: demo ? null : p.usage });
+  const costs = new CostBook({ prices: settings.prices });
+  engine.usage = usage;
+  if (demo) startDemoUsage(usage, store);
+  const burn = () => burnReport({ store, usage, costs, demo });
   // The second brain: your ~/.claude files, project .claude docs and Kroog notes, searchable.
   const brain = new SecondBrain({
     dir: nodePath.join(p.home, 'brain'),
@@ -110,6 +120,13 @@ async function start({ demo }) {
   let brainConnected = null;
   const detecting = runner.detect().catch(() => null);
 
+  // The mod's install state, refreshed on start, on request, and every ten minutes.
+  let modState = { installed: false, reason: 'not checked yet' };
+  const refreshMod = async () => {
+    if (demo) return;
+    try { modState = await modStatus({ claudePath: settings.claudePath || '' }); } catch (error) { modState = { installed: false, reason: error.message }; }
+    store.emit('info');
+  };
   const info = () => ({
     mode: demo ? 'demo' : 'live',
     version: VERSION,
@@ -118,6 +135,9 @@ async function start({ demo }) {
     apiKey: demo ? false : Boolean(readApiKey()),
     notesError: notes.lastError,
     claude: { ...runner.status(), registry: presence.available, open: presence.all().length },
+    // The mod that sends plan usage: checked now and then, not on every info() call.
+    mod: demo ? { installed: true, demo: true } : modState,
+    modLine: installLine(),
     // Whether the editor's own command is installed (folders then open without a dialog).
     editorCommand: demo ? true : Boolean(editorOpener.command(settings.defaultEditor || 'vscode')),
     ai: ai.status(),
@@ -129,7 +149,7 @@ async function start({ demo }) {
   });
 
   const updateSettings = (patch) => {
-    const allowed = ['ideOnly', 'permissionHoldSeconds', 'driveMinutes', 'notesEnabled', 'defaultEditor', 'claudePath', 'kroogPermissionMode', 'aiProvider', 'aiSummaries', 'aiDailyLimit', 'ollamaModel', 'ollamaUrl'];
+    const allowed = ['ideOnly', 'permissionHoldSeconds', 'driveMinutes', 'notesEnabled', 'defaultEditor', 'claudePath', 'kroogPermissionMode', 'aiProvider', 'aiSummaries', 'aiDailyLimit', 'ollamaModel', 'ollamaUrl', 'prices'];
     const next = { ...settings };
     for (const key of allowed) if (key in patch) next[key] = patch[key];
     next.permissionHoldSeconds = Math.max(0, Math.min(Number(next.permissionHoldSeconds) || 0, 540));
@@ -143,7 +163,21 @@ async function start({ demo }) {
     next.ollamaModel = String(next.ollamaModel || 'llama3.2').trim().slice(0, 80);
     if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(String(next.ollamaUrl || ''))) next.ollamaUrl = 'http://127.0.0.1:11434';
     next.notesEnabled = Boolean(next.notesEnabled);
+    // The price table: four families, four numbers each, dollars per million tokens.
+    const prices = {};
+    for (const fam of ['opus', 'sonnet', 'haiku', 'other']) {
+      const row = next.prices && next.prices[fam];
+      if (!row || typeof row !== 'object') continue;
+      const clean = {};
+      for (const k of ['input', 'output', 'cacheWrite', 'cacheRead']) {
+        const v = Number(row[k]);
+        if (Number.isFinite(v) && v >= 0 && v <= 10000) clean[k] = v;
+      }
+      if (Object.keys(clean).length === 4) prices[fam] = clean;
+    }
+    next.prices = Object.keys(prices).length ? prices : undefined;
     settings = next;
+    costs.setPrices(settings.prices);
     if (!demo) saveSettings(settings);
     return settings;
   };
@@ -215,6 +249,19 @@ async function start({ demo }) {
       const st = await runner.detect();
       return { message: st.found ? `Found Claude Code ${st.version}.` : 'Kroog could not find Claude Code on this Mac.' };
     },
+    // The mod for plan usage: install it from this folder, or see whether it is there.
+    'mod-install': async () => {
+      if (demo) return { message: 'In the demo the mod is pretend.' };
+      const m = await installMod({ claudePath: settings.claudePath || '', port });
+      if (!m.ok) throw new Error(m.error);
+      await refreshMod();
+      return { message: m.message };
+    },
+    'mod-check': async () => {
+      if (demo) return { message: 'In the demo the mod is pretend.' };
+      await refreshMod();
+      return { message: modState.installed ? `The mod is installed (${modState.version}), read from ${modState.from}.` : `The mod is not installed. ${modState.reason || ''}`.trim() };
+    },
     summarize: async ({ id, force } = {}) => {
       const r = ai.summarize(String(id || ''), { force: Boolean(force) });
       if (!r.ok) throw new Error(r.error);
@@ -263,10 +310,13 @@ async function start({ demo }) {
     },
   };
 
-  const { server, closeClients } = createServer({ port, token, engine, store, mode: demo ? 'demo' : 'live', getSettings: () => settings, updateSettings, info, actions, groups });
+  const { server, closeClients } = createServer({ port, token, engine, store, mode: demo ? 'demo' : 'live', getSettings: () => settings, updateSettings, info, actions, groups, usage, burn });
   // Refresh the suggestions now and then, when something changed.
   setTimeout(() => groups.refresh().catch(() => {}), demo ? 12000 : 20000).unref();
   setInterval(() => groups.refresh().catch(() => {}), 10 * 60000).unref();
+  // The mod's state, once Claude Code has been found.
+  detecting.then(() => refreshMod()).catch(() => {});
+  setInterval(() => refreshMod().catch(() => {}), 10 * 60000).unref();
 
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
@@ -356,6 +406,39 @@ async function start({ demo }) {
 }
 
 // What is listening on Kroog's port: an older Kroog or Crew, or something else.
+// The demo's plan usage: made-up windows that creep up, with three days of history for
+// the pace chart, and a cost for each chat.
+function startDemoUsage(usage, store) {
+  const now = Date.now();
+  const weekReset = now + 3 * 86400000 + 5 * 3600000;
+  const fiveReset = now + 2 * 3600000 + 11 * 60000;
+  for (let i = 96; i >= 1; i -= 1) {
+    const t = now - i * 3600000;
+    const wk = Math.max(0, 41 - i * 0.38 + Math.sin(i / 3) * 1.2);
+    usage.absorb({ t, sid: '', cwd: '', model: '', windows: { seven_day: { pct: Math.round(wk * 10) / 10, resetsAt: weekReset } }, cost: null, context: null }, false);
+  }
+  let five = 23.5;
+  let week = 41.2;
+  const tick = () => {
+    five = Math.min(100, five + 0.4);
+    week = Math.min(100, week + 0.06);
+    const working = Object.values(store.data.sessions).find((s) => s.status === 'working') || Object.values(store.data.sessions)[0];
+    usage.add({
+      sessionId: working ? working.id : '',
+      cwd: working ? working.cwd : '',
+      model: 'claude-opus-5-5',
+      rateLimits: [
+        { kind: 'five_hour', percentUsed: Math.round(five * 10) / 10, resetsAt: new Date(fiveReset).toISOString() },
+        { kind: 'seven_day', percentUsed: Math.round(week * 10) / 10, resetsAt: new Date(weekReset).toISOString() },
+      ],
+      cost: { usd: Math.round((1.2 + (week - 41.2) * 3) * 100) / 100 },
+      context: { percent: 31, tokens: 62000, window: 200000 },
+    });
+  };
+  tick();
+  setInterval(tick, 20000).unref();
+}
+
 async function whoIsOn(port) {
   let info = null;
   try {
@@ -468,11 +551,18 @@ try {
       const port = Number(option('port') || settings.port || DEFAULT_SETTINGS.port);
       if (port !== settings.port) saveSettings({ ...settings, port });
       printLinkResult(link({ port }));
+      // The mod, for plan usage. Best effort: Setup has the line to paste if this fails.
+      if (!flag('no-mod')) {
+        const m = await installMod({ claudePath: settings.claudePath || '', port });
+        console.log(m.ok ? m.message : `The Kroog mod was not installed (${m.error}). In a chat, run: ${installLine()}`);
+      }
       break;
     }
     case 'unlink': {
       const r = unlink();
       console.log(r.changed ? `Unlinked. Kroog's hooks were removed from ${r.settingsPath}. Backup: ${r.backupPath}` : 'Kroog was not linked. Nothing changed.');
+      const m = await uninstallMod({ claudePath: loadSettings().claudePath || '' });
+      if (m.ok) console.log('The Kroog mod was removed from Claude Code.');
       break;
     }
     case 'status':

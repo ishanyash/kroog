@@ -1,6 +1,6 @@
 {
   "name": "kroog",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Kroog: the map of your Claude Code chats. See what each chat is about, what it did and where it came from, and start the next one with the right context. Runs only on your Mac.",
   "type": "module",
   "private": true,

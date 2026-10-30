@@ -86,9 +86,10 @@ export class Engine {
     this.inbox = inbox || new Inbox();
     // Claude Code's own registry of open chats (see presence.js).
     this.presence = presence || new Presence({ dir: '' });
-    // Set by Runner and AiHelper when they are created.
+    // Set by Runner, AiHelper and the usage store when they are created.
     this.runner = null;
     this.ai = null;
+    this.usage = null;
     this.getSettings = getSettings;
     this.notes = notes;
     // Holding only makes sense while someone has a Kroog tab open to answer.
@@ -156,6 +157,8 @@ export class Engine {
       lastReply: s.lastReply ? clip(s.lastReply, PUBLIC_REPLY) : s.lastReply,
       aiFresh: this.ai ? this.ai.fresh(s) : undefined,
       openable: this.openable(s),
+      // What the chat has cost, as Claude Code counted it (from the mod), when known.
+      spend: this.usage ? this.usage.costOf(s.id) : null,
       waitingPermission: Boolean(this.waiter(s.id, 'permission')),
       inbox: live && (this.inbox.has(s.id) || Boolean(this.runner && this.runner.isRunning(s.id)) || Boolean(s.demoLive)),
       live,

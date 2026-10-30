@@ -6,6 +6,7 @@ Kroog is the map of your Claude Code chats. One browser tab shows every chat in 
 - **Understand.** Open a chat for its profile: what was asked, what got done, the files, the agents and what they came back with, the notes it left, where it came from. The full conversation is one click away.
 - **Connect.** Pick two or three chats (a suggested group, or the link keys) and open a new Claude Code chat whose first message is the context they established. The chat reads it and waits for you.
 - **Remember.** A second brain: your `CLAUDE.md` files, rules, skills and Claude Code's own memory, as a map and a search, usable from inside every Claude Code chat.
+- **Burn.** Your plan's 5-hour and weekly windows at the top of every page, and a page that shows the week's pace and where the spend went: by chat, project, day and model.
 
 It runs only on your Mac, with no editor plugin. Kroog was called Crew while it was a draft.
 
@@ -23,7 +24,7 @@ It runs only on your Mac, with no editor plugin. Kroog was called Crew while it 
 git clone https://github.com/ishanyash/kroog.git ~/kroog
 cd ~/kroog
 node bin/kroog.js demo      # try it with made-up chats; changes nothing
-node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/settings.json first)
+node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/settings.json first) and install its mod
 node bin/kroog.js start     # run it; opens http://127.0.0.1:4877
 ```
 
@@ -103,6 +104,18 @@ The first time, VS Code asks "Allow 'Claude Code for VS Code' extension to open 
 
 The **list** page starts with suggested groups: chats that look like the same piece of work. Each card has a name, the chats in it, and **new chat from these**, which jumps to the lineage with those chats picked and the panel ready. The × hides a suggestion. With the AI helper on, Haiku (on your plan) proposes and names the groups (the reason is a tooltip on the name); without it, Kroog groups by shared words. Haiku is asked again only when the set of chats changes, or with **look again**; the page never waits for it.
 
+### Burn
+
+The chip at the top shows your plan's two windows, the 5-hour one and the week, each as a thin bar with a mark where an even pace would be. Amber means ahead of pace. The **burn** page has the same two with their reset times, the week as a burn-up line against an even pace ("at this pace the week runs out Thursday 3 pm"), and where the last seven days' spend went: by day, by project, by model, and by chat.
+
+The numbers come from Kroog's **mod**, a small Claude Code plugin in this repo (`mod/`). After every turn, and whenever a window moves, Claude Code tells it the windows and the chat's cost, and it sends them to this Kroog at 127.0.0.1. It reads one file (Kroog's token), talks to no other host, and never sees your credentials. `node bin/kroog.js link` installs it from this folder (it updates with `git pull`); or, in any chat:
+
+```
+/plugin install kroog --marketplace ishanyash/kroog
+```
+
+Windows appear only on a claude.ai plan (Pro or Max). Cost per chat is Claude Code's own figure where the mod reported it; for other chats, including old ones, Kroog estimates it from the chat's transcript at list price and marks it with ~. The prices it uses are in **Setup**.
+
 ### Brain
 
 The **brain** page is a map of what Claude Code knows about your work, with your recent chats on it. Files and chats sit in their project's cluster and are linked when they are about the same things. Search highlights the matching nodes; click a node to read it, open it in VS Code, or add it to a brief. The results also appear as a list under the map.
@@ -124,7 +137,7 @@ The AI helper writes the one-line summaries, merged briefs and library notes. By
 | Command | What it does |
 | --- | --- |
 | `node bin/kroog.js demo` | Try it with made-up chats. Changes nothing. |
-| `node bin/kroog.js link` | Connect Claude Code to Kroog. |
+| `node bin/kroog.js link` | Connect Claude Code to Kroog, and install the mod (`--no-mod` to skip). |
 | `node bin/kroog.js start` | Run Kroog. Also brings in your chats from the last 7 days (`--no-import` to skip). |
 | `node bin/kroog.js stop` | Stop the Kroog (or old Crew) that is running. |
 | `node bin/kroog.js doctor` | Check everything and say what to fix. |
@@ -139,7 +152,7 @@ Add `--port 4878` to `link` and `start` to use another port.
 | What | Where |
 | --- | --- |
 | The app | wherever you cloned it, for example `~/kroog` |
-| Kroog's data: chats for the last 14 days, notes, briefs, chat inboxes, the brain index, settings, token, hook script, backups | `~/.kroog` |
+| Kroog's data: chats for the last 14 days, notes, briefs, chat inboxes, usage readings (30 days), the brain index, settings, token, hook script, backups | `~/.kroog` |
 | The hooks | `~/.claude/settings.json` |
 | The page | `http://127.0.0.1:4877`, on your Mac only |
 

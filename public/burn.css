@@ -1,0 +1,57 @@
+/* The burn page and the usage chip in the header (v1.4). One hue for magnitude (the
+   accent), amber only as a status (ahead of pace), text in ink tokens. */
+
+/* ---- the chip at the top ---- */
+.usage-chip { display: inline-flex; align-items: center; gap: 12px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--ink-2); cursor: pointer; font-size: var(--tiny); min-height: 28px; text-decoration: none; }
+.usage-chip:hover { border-color: var(--edge); color: var(--ink); }
+.usage-chip[hidden] { display: none; }
+.usage-chip .uw { display: inline-flex; align-items: center; gap: 6px; }
+.usage-chip .uw b { font-weight: 500; min-width: 3ch; text-align: right; }
+.usage-chip .uw .bar { position: relative; width: 44px; height: 5px; background: var(--line); border-radius: 1px; overflow: visible; }
+.usage-chip .uw .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 1px; }
+.usage-chip .uw .bar .pace { position: absolute; top: -3px; width: 1px; height: 11px; background: var(--ink-3); }
+.usage-chip .uw.ahead .bar i, .usage-chip .uw.near .bar i { background: var(--amber); }
+.usage-chip .uw.ahead b { color: var(--amber-ink); }
+.usage-chip .k { color: var(--ink-3); }
+@media (max-width: 760px) { .usage-chip .k { display: none; } .usage-chip { gap: 8px; } }
+
+/* ---- the page ---- */
+.burn .page-head .acts { display: flex; gap: 8px; align-items: center; }
+.burn-empty { margin: 0 0 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 4px; display: grid; gap: 10px; max-width: 46rem; }
+.burn-empty .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.burn-empty code { font-size: 12px; background: var(--code-bg); padding: 1px 5px; border-radius: 2px; }
+.wins { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 28px; margin-bottom: 20px; }
+.win { display: grid; gap: 8px; }
+.win-head { display: flex; align-items: baseline; gap: 12px; font-size: 13.5px; }
+.win-head b { font-weight: 500; }
+.win-head .quiet { margin-left: auto; font-size: var(--small); }
+.win .bar { position: relative; height: 8px; background: var(--line); border-radius: 2px; }
+.win .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; }
+.win .bar .pace { position: absolute; top: -4px; width: 1px; height: 16px; background: var(--ink-3); }
+.win.ahead .bar i, .win.near .bar i { background: var(--amber); }
+.win .quiet { margin: 0; font-size: var(--small); }
+
+.pace-chart { margin: 0 0 28px; max-width: 580px; }
+.pace-chart svg { display: block; width: 100%; height: auto; }
+.pace-chart .grid { stroke: var(--line); stroke-width: 1; }
+.pace-chart .ax { fill: var(--ink-3); font-size: 10px; font-family: var(--mono); }
+.pace-chart .even { stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.pace-chart .now { stroke: var(--ink-3); stroke-width: 1; }
+.pace-chart .used { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pace-chart .dot { fill: var(--paper); stroke: var(--accent); stroke-width: 2; }
+.pace-chart .lbl { fill: var(--ink); font-size: 11px; font-family: var(--mono); font-weight: 500; }
+.pace-chart figcaption { font-size: var(--small); margin-top: 4px; }
+
+.went .section-head { margin-top: 8px; }
+.went > .quiet { margin: 4px 0 14px; font-size: var(--small); }
+.went-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px 32px; margin-bottom: 22px; }
+.went h3 { font-size: var(--small); font-weight: 500; color: var(--ink-3); margin: 0 0 8px; }
+.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.bars li { display: grid; grid-template-columns: 7rem minmax(0, 1fr) 4.5rem; gap: 10px; align-items: center; font-size: 13px; min-height: 20px; }
+.bars li .l { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; text-align: left; font-size: 13px; }
+.bars li .b { position: relative; height: 10px; background: none; }
+.bars li .b i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 0 2px 2px 0; opacity: 0.85; }
+.bars li .v { color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.bars.chats li { grid-template-columns: minmax(0, 18rem) minmax(0, 1fr) 4.5rem 8rem; }
+.bars.chats .p { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) { .bars.chats li { grid-template-columns: minmax(0, 1fr) 4.5rem; } .bars.chats .b, .bars.chats .p { display: none; } }

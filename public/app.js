@@ -6,6 +6,7 @@ import {
 } from './util.js';
 import { renderBrain } from './brain.js';
 import { mountLineage, unmountLineage, renderLineage, isMounted, fit, zoomBy, reveal, nextNeeding, setBackground, themeChanged, shiftWeek } from './lineage.js';
+import { renderBurn, unmountBurn, burnUsageChanged, burnRefresh, windowHtml, tokensText } from './burn.js';
 
 const S = { sessions: new Map(), notes: [], briefs: [], groups: [], settings: {}, info: {}, connected: false, lastEventAt: 0 };
 const UI = {
@@ -124,6 +125,7 @@ function applySnapshot(data) {
   S.notes = data.notes || [];
   S.briefs = data.briefs || [];
   S.groups = data.groups || [];
+  S.usage = data.usage || null;
   S.settings = data.settings || {};
   S.info = data.info || {};
   for (const s of S.sessions.values()) UI.previous.set(s.id, s.status);
@@ -147,6 +149,7 @@ function connect() {
   es.addEventListener('notes', (e) => { S.notes = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('briefs', (e) => { S.briefs = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('groups', (e) => { S.groups = JSON.parse(e.data); scheduleRender(); });
+  es.addEventListener('usage', (e) => { S.usage = JSON.parse(e.data); renderTop(); burnUsageChanged(S); });
   es.addEventListener('settings', (e) => { S.settings = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('info', (e) => { S.info = JSON.parse(e.data); scheduleRender(); });
   es.onopen = () => { S.connected = true; renderTop(); };
@@ -231,10 +234,12 @@ function renderAll(routeChanged) {
     if (isMounted()) unmountLineage();
     hideHover();
     view.classList.remove('is-canvas');
+    if (UI.route !== 'burn') unmountBurn();
     preserveFocus(() => {
       if (UI.route === 'list') renderList(routeChanged);
       else if (UI.route === 'library') renderLibrary();
       else if (UI.route === 'brain') renderBrain($('#view'), S, { post, toast, esc, openUrl });
+      else if (UI.route === 'burn') renderBurn($('#view'), S, { post });
       else renderSetup();
     });
   }
@@ -260,7 +265,22 @@ function hoverCardHtml(s) {
   return `<div class="hc-head"><span class="w k-${lk.k}">${esc(lk.word)}</span><span class="when">${esc(whenText(s))}</span></div>
     <b class="hc-title">${esc(trim(s.title || 'New chat', 90))}</b>
     <div class="hc-body">${body}</div>
-    <div class="hc-foot"><span>${esc(s.project || '')}</span>${s.place ? `<span>${esc(s.place)}</span>` : ''}${(s.files || []).length ? `<span>${plural(s.files.length, 'file')}</span>` : ''}</div>`;
+    <div class="hc-foot"><span>${esc(s.project || '')}</span>${s.place ? `<span>${esc(s.place)}</span>` : ''}${(s.files || []).length ? `<span>${plural(s.files.length, 'file')}</span>` : ''}${spendText(s) ? `<span>${esc(spendText(s))}</span>` : ''}</div>`;
+}
+
+// The price table, as a short line: "opus 5/25, sonnet 3/15, haiku 1/5 (in/out)".
+function pricesText(prices) {
+  const d = { opus: { input: 5, output: 25 }, sonnet: { input: 3, output: 15 }, haiku: { input: 1, output: 5 } };
+  const t = { ...d, ...(prices || {}) };
+  return `${['opus', 'sonnet', 'haiku'].map((f) => `${f} ${t[f].input}/${t[f].output}`).join(', ')} (in/out)`;
+}
+
+// What a chat has cost, as Claude Code counted it (sent in by the mod).
+function spendText(s) {
+  const sp = s.spend;
+  if (!sp || sp.usd == null) return '';
+  const n = Number(sp.usd);
+  return n >= 100 ? `$${Math.round(n)}` : n >= 10 ? `$${n.toFixed(1)}` : `$${n.toFixed(2)}`;
 }
 
 function keywordsHtml(ai) {
@@ -317,6 +337,7 @@ function renderTop() {
   $('#needs-count').textContent = String(needs);
   pill.setAttribute('aria-label', `${plural(needs, 'chat')} need${needs === 1 ? 's' : ''} you. Go to the next one.`);
   document.title = needs ? `(${needs}) kroog` : 'kroog';
+  renderUsageChip();
   for (const a of $$('.nav a')) {
     if (a.dataset.route === UI.route) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -324,6 +345,18 @@ function renderTop() {
   const conn = $('#conn');
   conn.classList.toggle('off', !S.connected);
   conn.querySelector('span').textContent = S.connected ? (S.info.mode === 'demo' ? 'demo' : 'live') : 'offline';
+}
+
+// The usage chip: the plan's two windows, as thin bars, with a mark where an even pace
+// would be. Hidden until the mod has sent a reading.
+function renderUsageChip() {
+  const chip = $('#usage-chip');
+  const u = S.usage;
+  const w = u && u.windows ? u.windows : {};
+  if (!u || (!w.five_hour && !w.seven_day)) { chip.hidden = true; return; }
+  chip.hidden = false;
+  chip.innerHTML = `${w.five_hour ? `<span class="k">5h</span>${windowHtml('five_hour', w.five_hour, { compact: true })}` : ''}${w.seven_day ? `<span class="k">week</span>${windowHtml('seven_day', w.seven_day, { compact: true })}` : ''}`;
+  chip.classList.toggle('stale', Boolean(u.stale));
 }
 
 // ---------------------------------------------------------------- side panel
@@ -651,10 +684,13 @@ function profileHtml(s) {
   const ledTo = [...S.sessions.values()].filter((o) => o.id !== s.id && (o.inputs || []).some((i) => (i.from || []).includes(s.id)));
   if (ledTo.length) sections.push(['led to', `<div class="line">${ledTo.map((o) => chatLink(o.id)).join(', ')}</div>`]);
 
+  if (spendText(s)) sections.push(['cost', `<div class="line">${esc(spendText(s))} <span class="quiet">so far, as Claude Code counts it</span></div>`]);
+
   const bits = [];
   if (files.length) bits.push(plural(files.length, 'file'));
   if (agents.length) bits.push(plural(agents.length, 'agent'));
   if (notes.length) bits.push(plural(notes.length, 'note'));
+  if (spendText(s)) bits.push(spendText(s));
   if (from.length || ledTo.length) bits.push('lineage');
   html += `<details class="more" ${UI.showMore ? 'open' : ''}><summary>more${bits.length ? `<span class="quiet">${esc(bits.join(', '))}</span>` : ''}</summary>
     <dl class="readout">${sections.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>
@@ -1150,6 +1186,8 @@ function renderSetup() {
   const ai = info.ai || {};
   const claudeState = demo ? '<span class="state">demo</span>' : cl.found ? '<span class="state ok">ready</span>' : '<span class="state warn">not found</span>';
   const aiState = ai.provider && ai.provider !== 'off' ? `<span class="state ok">${esc({ claude: 'claude code', api: 'api key', ollama: 'ollama', demo: 'demo' }[ai.provider] || ai.provider)}</span>` : '<span class="state">off</span>';
+  const mod = info.mod || {};
+  const modState = demo ? '<span class="state ok">demo</span>' : mod.installed ? '<span class="state ok">mod installed</span>' : '<span class="state">mod missing</span>';
   const aiLine = demo
     ? 'In the demo, summaries are made from the chat text, with no model.'
     : ai.provider === 'claude' ? `Each call is one short Haiku request through Claude Code. It counts toward your plan's usage like any Claude Code chat, and takes about 3 seconds. ${ai.usedToday || 0} of ${ai.limit || 200} used today.`
@@ -1178,6 +1216,15 @@ function renderSetup() {
           ? `<p class="quiet">${esc(EDITORS[st.defaultEditor] || 'VS Code')}'s own command was found, so project folders open without a dialog.</p>`
           : `<p class="quiet">${esc(EDITORS[st.defaultEditor] || 'VS Code')}'s own command (<code>${st.defaultEditor === 'cursor' ? 'cursor' : 'code'}</code>) was not found, so each project folder opens through a link and macOS asks once whether to allow it (tick "allow without asking"). To avoid that, run "Shell Command: Install '${st.defaultEditor === 'cursor' ? 'cursor' : 'code'}' command in PATH" from the editor's command palette, then restart Kroog.</p>`}
 
+      </div></section>
+
+      <section class="set"><h2>Usage ${modState}</h2><div class="body">
+        <p>Kroog's mod is a small Claude Code plugin that sends each chat's plan usage (the 5-hour and weekly windows) and cost to this Kroog, and nothing anywhere else. The <a href="#/burn">burn</a> page and the chip at the top come from it.</p>
+        ${demo ? '<p class="quiet">In the demo the readings are made up.</p>' : mod.installed
+          ? `<p class="quiet">Installed (${esc(mod.version || '')}), read from <code>${esc(tildePath(mod.from || ''))}</code>${mod.current === false ? '. That is not this folder; run <code>node bin/kroog.js link</code> to point it here.' : '. It updates with git pull.'}</p>`
+          : `<p>${esc(mod.reason || 'The mod is not installed.')}</p><div class="tools" style="margin:0"><button type="button" class="btn solid" id="mod-install">install the mod</button><button type="button" class="btn soft" id="mod-check">check again</button></div>
+             <p class="quiet">Or, in a chat: <code>${esc(info.modLine || '')}</code>. Chats started after that send their usage.</p>`}
+        <p class="quiet">Cost per chat on the burn page is Claude Code's own figure where the mod reported it, and otherwise an estimate from the chat's transcript at these list prices (dollars per million tokens): ${esc(pricesText(st.prices))}. To change them, add a <code>prices</code> table to <code>${esc(tildePath((info.paths || {}).home || '~/.kroog'))}/settings.json</code>.</p>
       </div></section>
 
       <section class="set"><h2>AI helper ${aiState}</h2><div class="body">
@@ -1276,7 +1323,7 @@ function renderLog() {
 function route() {
   const r = (location.hash.replace(/^#\/?/, '') || (window.innerWidth < 760 ? 'list' : 'lineage')).split('?')[0];
   const map = { board: 'lineage', handoff: 'lineage' };
-  const next = map[r] || (['lineage', 'list', 'brain', 'library', 'setup'].includes(r) ? r : 'lineage');
+  const next = map[r] || (['lineage', 'list', 'brain', 'library', 'burn', 'setup'].includes(r) ? r : 'lineage');
   // An unfinished brief waits on the lineage while you visit other pages.
   if (r === 'handoff') UI.handoff.active = true;
   UI.route = next;
@@ -1407,6 +1454,9 @@ document.addEventListener('click', async (e) => {
       break;
     }
     case 'claude-check': await act(post('claude-check'), (r) => r.message); break;
+    case 'mod-install': t.disabled = true; await act(post('mod-install'), (r) => r.message); t.disabled = false; renderAll(false); break;
+    case 'mod-check': await act(post('mod-check'), (r) => r.message); break;
+    case 'burn-again': await burnRefresh(S, post); break;
     case 'groups-again': t.disabled = true; t.textContent = 'looking'; await act(post('groups', { force: true })); renderAll(false); break;
     case 'ho-copy':
       try { await navigator.clipboard.writeText(briefText()); toast('Brief copied. Paste it into any chat.'); } catch { toast('Copy failed. Open the preview and copy the text instead.'); }

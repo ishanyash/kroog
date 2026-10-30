@@ -56,7 +56,7 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
-export function createServer({ port, token, engine, store, mode, getSettings, updateSettings, info, actions, groups = null }) {
+export function createServer({ port, token, engine, store, mode, getSettings, updateSettings, info, actions, groups = null, usage = null, burn = null }) {
   const clients = new Set();
   engine.hasViewers = () => clients.size > 0;
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
@@ -73,6 +73,7 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
       notes: store.data.notes,
       briefs: store.pendingBriefs(),
       groups: groups ? groups.current() : [],
+      usage: usage ? usage.summary() : null,
       settings: getSettings(),
       info: info(),
     };
@@ -98,6 +99,7 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
   store.on('notes', () => broadcast('notes', store.data.notes));
   store.on('briefs', () => broadcast('briefs', store.pendingBriefs()));
   store.on('groups', (list) => broadcast('groups', list));
+  if (usage) usage.on('usage', (summary) => broadcast('usage', summary));
   store.on('info', () => broadcast('info', info()));
   const heartbeat = setInterval(() => {
     for (const res of clients) res.write(': ping\n\n');
@@ -116,6 +118,12 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
       body = raw ? JSON.parse(raw) : {};
     } catch {
       res.writeHead(400);
+      return res.end();
+    }
+    // A reading from Kroog's mod: the plan's windows and this chat's cost.
+    if (event === 'measure') {
+      if (usage) usage.add(body);
+      res.writeHead(204);
       return res.end();
     }
     const controller = new AbortController();
@@ -149,6 +157,14 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
     const route = url.pathname.slice('/api/'.length);
 
     if (req.method === 'GET' && route === 'state') return sendJson(res, 200, snapshot());
+    // Plan usage: the windows now, their history, and where the week's spend went.
+    if (req.method === 'GET' && route === 'burn') {
+      try {
+        return sendJson(res, 200, { ok: true, ...(burn ? await burn() : {}) });
+      } catch (error) {
+        return sendJson(res, 200, { ok: false, error: error.message });
+      }
+    }
     // The real conversation of one chat, from Claude Code's own history file.
     if (req.method === 'GET' && route.startsWith('transcript/')) {
       const sid = decodeURIComponent(route.slice('transcript/'.length));
