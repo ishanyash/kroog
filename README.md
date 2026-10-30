@@ -166,12 +166,13 @@ Add `--port 4878` to `link` and `start` to use another port.
 - **What the page gets.** The browser gets each chat's newest 40 steps and the counts of the rest, not the whole chat, and a working chat's updates a few times a second at most. Kroog saves its state at most every 5 seconds, off the main thread. With a few hundred chats, the earlier way of doing all three was what made it slow.
 - **Claude Code on your Mac.** The AI helper uses Claude Code itself (`claude -p`, with Haiku), with your usual login and settings. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
 
-## Safety
+## Safety and privacy
 
 - Kroog only listens on `127.0.0.1`. Other computers can't reach it.
-- Hooks must carry a secret token, and other websites can't send commands to Kroog or show it inside their pages.
-- Kroog never edits your code. A message from Kroog can't approve permissions; Claude Code always asks you.
-- The AI helper's input goes to Anthropic, like any Claude Code chat. With Ollama it stays on your Mac. The brain index stays on your Mac.
+- Hooks and the mod must carry a secret token, and other websites can't send commands to Kroog or show it inside their pages.
+- Kroog never edits your code and never runs a chat. A message from Kroog can't approve permissions; Claude Code always asks you.
+- The AI helper's input goes to Anthropic, like any Claude Code chat. With Ollama it stays on your Mac. The brain index and the usage readings stay on your Mac. There is no telemetry.
+- Kroog never reads your credentials: not `~/.claude/.credentials.json`, not the Keychain. `SECURITY.md` lists exactly what it reads, writes and connects to, `test/boundary.test.js` fails the build if the code steps outside that, and `node bin/kroog.js doctor` prints the list with your paths.
 
 ## Limits
 
@@ -179,6 +180,10 @@ Add `--port 4878` to `link` and `start` to use another port.
 - **open in VS Code** for a chat Kroog started needs VS Code to have that project folder open. Kroog opens the folder first.
 - While Kroog holds a permission question, VS Code shows that chat as busy.
 - Claude Code's history format and hook behaviour can change between versions.
+
+## Licence
+
+MIT. See `LICENSE`, and `NOTICE` for what Kroog ships with. Contributions: `CONTRIBUTING.md`.
 
 ## Credits
 

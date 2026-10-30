@@ -130,4 +130,20 @@ export function printDoctor(r) {
   }
   const problems = r.checks.filter((c) => !c.ok).length;
   console.log(problems ? `\n${problems} thing${problems === 1 ? '' : 's'} to fix.` : '\nAll good.');
+  console.log(boundaryText(r));
+}
+
+// The boundary Kroog keeps (SECURITY.md), with this Mac's paths filled in.
+export function boundaryText(r) {
+  const c = r.claudeDir;
+  const h = r.home;
+  return [
+    '',
+    'What Kroog touches on this Mac:',
+    `  reads    ${c}/projects (transcripts, memory), ${c}/sessions, ${c}/settings.json,`,
+    `           ${c}/CLAUDE.md, rules, skills, agents, commands, plans; each project's CLAUDE.md and .claude docs; ${h}`,
+    `  writes   ${h}; hook entries and the mod in Claude Code's settings (backed up first); the clipboard when you ask`,
+    '  network  listens on 127.0.0.1 only; out to api.anthropic.com only with your own key, Ollama at 127.0.0.1, and claude -p for the helper',
+    `  never    ${c}/.credentials.json, the Keychain, any .env but its own, your source files, other apps, telemetry`,
+  ].join('\n');
 }

@@ -17,5 +17,34 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ishanyash/kroog.git"
+  },
+  "homepage": "https://github.com/ishanyash/kroog#readme",
+  "bugs": {
+    "url": "https://github.com/ishanyash/kroog/issues"
+  },
+  "author": "Ishan Yash",
+  "keywords": [
+    "claude-code",
+    "claude",
+    "chats",
+    "map",
+    "local",
+    "mac"
+  ],
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "mod",
+    ".claude-plugin",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "SECURITY.md"
+  ]
 }

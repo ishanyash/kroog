@@ -1,0 +1,8 @@
+Kroog is MIT licensed (see LICENSE). It ships with:
+
+- IBM Plex Mono, by IBM, under the SIL Open Font License 1.1
+  (public/fonts/LICENSE-IBM-Plex.txt).
+- The fish behind the week view, from the ascii-sharks ocean by stackedlol,
+  MIT License (public/water-LICENSE.txt), with the sharks left out.
+- The look follows the rules of Hallmark by nutlope, MIT License
+  (https://github.com/nutlope/hallmark); none of its code is included.
