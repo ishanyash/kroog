@@ -106,6 +106,9 @@ export function startDemo({ engine, store }) {
     await h('SessionStart', rename, siteDir, 'vscode', { source: 'startup' });
     await h('UserPromptSubmit', rename, siteDir, 'vscode', { prompt: 'Give the sections on the work page clearer names.' });
     await h('Stop', rename, siteDir, 'vscode', { last_assistant_message: 'Renamed 4 headings on the work page.' });
+    // In the story, this chat and the cost chat are still open in the editor.
+    store.session(rename).demoLive = true;
+    store.session(cost).demoLive = true;
     place(rename, 1530, [1510]);
 
     // Not in an editor, so hidden while "Only editor chats" is on.

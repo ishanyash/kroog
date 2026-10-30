@@ -1,6 +1,6 @@
 {
   "name": "kroog",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Kroog: a local board for the Claude Code chats in your editor. Watch them, approve their requests and send them messages from a browser tab.",
   "type": "module",
   "private": true,

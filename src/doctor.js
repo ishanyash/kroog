@@ -6,6 +6,7 @@ import path from 'node:path';
 import { paths, loadSettings, claudeDir } from './config.js';
 import { linkStatus, hasOldCrewHooks } from './link.js';
 import { findClaude, claudeVersion } from './claude-cli.js';
+import { Presence } from './presence.js';
 
 // Claude Code gives each chat an inbox from this version on.
 export const INBOX_VERSION = '2.1.224';
@@ -77,12 +78,26 @@ export async function doctor({ version = '' } = {}) {
     else bad(`${e.editor} has Claude Code ${e.version}, which is too old for messages from Kroog`, `Update the Claude Code extension to ${INBOX_VERSION} or newer`);
   }
 
-  // 4. Inboxes Kroog knows, and recent hook events.
+  // 4. Claude Code's registry of open chats.
+  const presence = new Presence({ dir: path.join(claudeDir(), 'sessions') });
+  presence.refresh();
+  if (presence.available) {
+    const open = presence.all();
+    const inEditors = open.filter((e) => e.entry === 'claude-vscode').length;
+    if (open.length) ok(`Claude Code reports ${open.length} open chat${open.length === 1 ? '' : 's'} right now${inEditors ? ` (${inEditors} in an editor)` : ''}`, open.slice(0, 5).map((e) => `${e.busy ? 'busy' : 'idle'} · ${e.cwd}`).join('\n           '));
+    else ok('Claude Code reports no open chats right now', 'Open one in VS Code and it shows up within seconds');
+  } else {
+    bad('Claude Code\'s registry of open chats was not found', 'Kroog then learns about a chat only when it does something. Update Claude Code if this stays.');
+  }
+
+  // 5. Inboxes Kroog knows, and recent hook events.
   let inboxes = {};
   try { inboxes = JSON.parse(fs.readFileSync(p.inboxes, 'utf8')); } catch { /* none */ }
   const known = Object.values(inboxes);
   const alive = known.filter((v) => { try { return fs.statSync(v.socket).isSocket(); } catch { return false; } });
-  if (alive.length) ok(`Kroog can message ${alive.length} open chat${alive.length === 1 ? '' : 's'} right now`);
+  const fromRegistry = presence.available ? presence.all().filter((e) => e.socket && e.token).length : 0;
+  if (alive.length || fromRegistry) ok(`Kroog can message ${Math.max(alive.length, fromRegistry)} open chat${Math.max(alive.length, fromRegistry) === 1 ? '' : 's'} right now`);
+  else if (presence.available) ok('No open chat to message right now', 'Open one in VS Code and Kroog can reach it within seconds');
   else bad('Kroog knows no open chat inbox yet', 'In VS Code, send any message in the chat once while Kroog runs. If it still does not show up, type /status in that chat: it needs a "Peer address" line.');
   let state = {};
   try { state = JSON.parse(fs.readFileSync(p.state, 'utf8')); } catch { /* none */ }

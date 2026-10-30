@@ -32,7 +32,7 @@ const waterOn = () => store.get('kroog-water', 'on') !== 'off';
 // Kroog can run chats itself when it found Claude Code on this Mac.
 const canRun = () => Boolean(S.info.claude && S.info.claude.found);
 const aiOn = () => Boolean(S.info.ai && S.info.ai.provider && S.info.ai.provider !== 'off');
-const kroogRunning = (s) => s.owner === 'kroog' && (s.status === 'working' || (s.status === 'needs' && s.needs && s.needs.kroog));
+const kroogRunning = (s) => Boolean(s.kroogRunning);
 const aiBasis = (s) => `${s.status}|${(s.steps || []).length}|${(s.lastReply || '').length}`;
 const aiFresh = (s) => Boolean(s.ai && s.ai.basis === aiBasis(s));
 const asked = new Map();
@@ -219,7 +219,7 @@ function hoverCardHtml(s) {
     body = fallback ? `<p>${esc(fallback)}</p>` : `<p class="quiet">${aiOn() ? 'No summary yet.' : 'Turn on the AI helper in setup for summaries.'}</p>`;
   }
   return `<div class="hc-head"><span class="w k-${lk.k}">${esc(lk.word)}</span><span class="when">${esc(whenText(s))}</span></div>
-    <b class="hc-title">${esc(trim(s.title || 'Untitled chat', 90))}</b>
+    <b class="hc-title">${esc(trim(s.title || 'New chat', 90))}</b>
     <div class="hc-body">${body}</div>
     <div class="hc-foot">${esc(s.project || '')}${s.place ? ` · ${esc(s.place)}` : ''}${(s.files || []).length ? ` · ${plural(s.files.length, 'file')}` : ''}</div>`;
 }
@@ -458,11 +458,9 @@ function placeName(s) {
 
 // Where the chat is, and whether Kroog can reach it.
 function whereLine(s) {
-  if (s.owner === 'kroog' && kroogRunning(s)) return '<span class="live">running in kroog</span>';
-  if (s.inbox) return `<span class="live">live in ${esc(placeName(s))}</span>`;
-  if (s.status === 'ended') return `<span>closed in ${esc(placeName(s))}</span>`;
-  if (s.owner === 'kroog') return '<span>in kroog</span>';
-  return `<span>in ${esc(placeName(s))}</span>`;
+  if (kroogRunning(s)) return '<span class="live">running in kroog</span>';
+  if (s.live) return `<span class="live">open in ${esc(placeName(s))}</span>`;
+  return `<span>not open now · last in ${esc(placeName(s))}</span>`;
 }
 
 function sideHeadHtml(s) {
@@ -480,7 +478,7 @@ function sideHeadHtml(s) {
   return `<div class="row"><span class="w">${esc(lk.word)}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span></span>
       <span class="head-acts">${openBtn}<details class="menu" ${UI.menuOpen ? 'open' : ''}><summary class="icon-btn" aria-label="More">⋯</summary><div class="menu-items">${menu}</div></details>
       <button type="button" class="icon-btn" data-close aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>
-    <h2>${esc(s.title || 'Untitled chat')}</h2>
+    <h2>${esc(s.title || 'New chat')}</h2>
     <div class="where">${whereLine(s)}<span>${esc(s.project)}</span>${(s.inputs || []).length ? `<span>${givenText(s)}</span>` : ''}</div>
     ${ai && ai.gist ? `<div class="gistline"><span>${esc(ai.gist)}</span>${(ai.keywords || []).map((k) => `<i>${esc(k)}</i>`).join('')}</div>` : s.aiPending ? '<div class="gistline quiet">summarising<span class="dots"></span></div>' : ''}`;
 }
@@ -488,7 +486,7 @@ function sideHeadHtml(s) {
 function chatLink(id) {
   const s = S.sessions.get(id);
   if (!s) return 'an earlier chat';
-  return `<a class="linkish" href="#/lineage" data-open="${esc(id)}">${esc(trim(s.title || 'Untitled chat', 40))}</a>`;
+  return `<a class="linkish" href="#/lineage" data-open="${esc(id)}">${esc(trim(s.title || 'New chat', 40))}</a>`;
 }
 
 function givenText(s) {
@@ -591,9 +589,12 @@ function composerMode(s) {
   if (UI.branchFor === s.id) return 'branch';
   if (s.holdingStop) return 'now';
   if (s.inbox) return 'inbox';
-  const live = s.status === 'working' || (s.status === 'needs' && s.needs && s.needs.kind === 'permission' && (s.waitingPermission || s.needs.kroog));
-  if (live) return 'queue';
-  if (s.owner === 'kroog' && canRun()) return 'kroog';
+  const busy = s.status === 'working' || (s.status === 'needs' && s.needs && s.needs.kind === 'permission' && (s.waitingPermission || s.needs.kroog));
+  if (busy) return 'queue';
+  // Not open anywhere: Kroog carries the same chat on here, when Claude Code's registry of
+  // open chats is there to confirm it (or Kroog ran it / saw it close).
+  const registry = Boolean(S.info.claude && S.info.claude.registry);
+  if (canRun() && !s.live && (registry || s.owner === 'kroog' || s.status === 'ended')) return 'continue';
   return s.editor ? 'unreachable' : 'later';
 }
 
@@ -611,7 +612,7 @@ function updateComposer(s) {
     now: ['send', 'Goes in now. It was waiting for you.'],
     inbox: ['send', `Goes straight into the chat${s.owner === 'kroog' ? '' : ` in ${ed}`}.`],
     queue: ['send', 'It reads this after its current step.'],
-    kroog: ['send', 'Runs the next turn here in Kroog.'],
+    continue: ['send', `Not open anywhere, so Kroog carries this chat on here. You can open it in ${ed} again afterwards.`],
     branch: ['start branch', 'Starts a new chat here with everything this one knows, plus your message. This chat stays as it is.'],
     unreachable: [`open in ${ed}`, `${why}, so Kroog can't reach it. Open it in ${ed} (your message is copied) and send it once there. After that, Kroog can message it.`],
     later: ['send', 'It reads this with your next message where the chat runs.'],
@@ -735,7 +736,7 @@ function composeBrief() {
       const ns = S.notes.filter((x) => x.sessionId === s.id);
       if (ns.length) parts.push(`Notes:\n${ns.map((x) => `- ${x.type}: ${x.text}`).join('\n')}`);
     }
-    if (parts.length) lines.push('', `From the chat "${s.title || 'Untitled chat'}" (${s.project}, ${look(s).word}):`, ...parts);
+    if (parts.length) lines.push('', `From the chat "${s.title || 'New chat'}" (${s.project}, ${look(s).word}):`, ...parts);
   }
   if ((h.extra || []).length) lines.push('', 'From the second brain:', ...h.extra.map((x) => `--- ${x.title} ---\n${clipText(x.text, h.short ? 600 : 2500)}`));
   const extra = S.notes.filter((x) => h.notes.includes(x.id));
@@ -787,7 +788,7 @@ function briefPanelHtml() {
       return `<label class="check"><input type="checkbox" data-inc="${esc(s.id)}" data-key="${key}" ${src.include[key] ? 'checked' : ''}><span>${label} <span class="quiet">${unit ? plural(v, unit) : v}</span></span></label>`;
     };
     const ticks = `${tick('reply', 'its last reply', 'word')}${tick('prompt', 'what was asked', 'word')}${tick('plan', 'its plan', 'step')}${tick('files', 'files changed', '')}${tick('notes', 'its notes', '')}`;
-    return `<div class="src"><div class="head"><b>${esc(s.title || 'Untitled chat')}</b><button type="button" class="linkish quiet" data-unsource="${esc(s.id)}">remove</button></div>
+    return `<div class="src"><div class="head"><b>${esc(s.title || 'New chat')}</b><button type="button" class="linkish quiet" data-unsource="${esc(s.id)}">remove</button></div>
       <div class="ticks">${ticks || '<span class="quiet">Nothing to hand off from this chat yet.</span>'}</div></div>`;
   }).join('');
   const extraHtml = (h.extra || []).map((x, i) => `<div class="src"><div class="head"><b>${esc(trim(x.title, 80))}</b><button type="button" class="linkish quiet" data-unextra="${i}">remove</button></div><span class="quiet" style="font-size:12px">from the brain</span></div>`).join('');
@@ -820,7 +821,7 @@ function briefPanelHtml() {
       else note = `It is waiting in ${esc(edName(t))}, so Kroog starts a branch of it here with the brief. The ${esc(edName(t))} chat stays as it is.`;
     }
     destFields = live.length
-      ? `<div class="field"><label for="ho-run">Which chat</label><select id="ho-run">${live.map((s) => `<option value="${esc(s.id)}" ${s.id === h.runTarget ? 'selected' : ''}>${esc(trim(s.title || 'Untitled chat', 56))} (${esc(look(s).word)})</option>`).join('')}</select></div>${t && t.inbox ? '' : runSeg}${note ? `<p class="quiet">${note}</p>` : ''}`
+      ? `<div class="field"><label for="ho-run">Which chat</label><select id="ho-run">${live.map((s) => `<option value="${esc(s.id)}" ${s.id === h.runTarget ? 'selected' : ''}>${esc(trim(s.title || 'New chat', 56))} (${esc(look(s).word)})</option>`).join('')}</select></div>${t && t.inbox ? '' : runSeg}${note ? `<p class="quiet">${note}</p>` : ''}`
       : '<p class="quiet">No open chats to send to.</p>';
   } else {
     destFields = folders.length
@@ -903,15 +904,11 @@ async function sendHandoff() {
 function renderList() {
   const q = UI.list.query.trim().toLowerCase();
   const all = visibleSessions(S).filter((s) => !q || `${s.title} ${s.project} ${s.now} ${s.lastPrompt} ${s.place}`.toLowerCase().includes(q));
-  const counts = { all: all.length, needs: 0, working: 0, done: 0, quiet: 0 };
+  const counts = { all: all.length, needs: 0, working: 0, open: 0, done: 0 };
   for (const s of all) counts[bucket(s)] += 1;
-  const defs = [['needs', 'needs you'], ['working', 'working'], ['done', 'done'], ['quiet', 'quiet']];
-  const sorters = {
-    needs: (a, b) => (a.since || 0) - (b.since || 0),
-    working: (a, b) => (b.lastAt || 0) - (a.lastAt || 0),
-    done: (a, b) => (b.since || 0) - (a.since || 0),
-    quiet: (a, b) => (b.lastAt || 0) - (a.lastAt || 0),
-  };
+  const defs = [['needs', 'needs you'], ['working', 'working'], ['open', 'open'], ['done', 'done']];
+  const byLast = (a, b) => (b.lastAt || 0) - (a.lastAt || 0);
+  const sorters = { needs: (a, b) => (a.since || 0) - (b.since || 0), working: byLast, open: byLast, done: byLast };
   const shown = all.filter((s) => UI.list.filter === 'all' || bucket(s) === UI.list.filter);
   const sections = defs.map(([key, title]) => {
     const items = shown.filter((s) => bucket(s) === key).sort(sorters[key]);
@@ -932,8 +929,8 @@ function rowHtml(s) {
   const lk = look(s);
   return `<li><button type="button" class="row k-${lk.k}${UI.selected === s.id ? ' sel' : ''}" data-open="${esc(s.id)}">
     <span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>
-    <span><span class="title">${esc(s.title || 'Untitled chat')}</span><span class="desc">${esc(lineText(s))}</span><span class="meta">${esc(s.project)}, ${esc(s.place || s.app)}</span></span>
-    <span class="end">${esc(lk.word)}</span>
+    <span><span class="title">${esc(s.title || 'New chat')}</span><span class="desc">${esc(lineText(s))}</span><span class="meta">${esc(s.project)}, ${esc(s.place || s.app)}</span></span>
+    <span class="end">${s.live && lk.k !== 'working' ? '<i class="live-dot" title="open now"></i>' : ''}${esc(lk.word)}</span>
   </button></li>`;
 }
 
@@ -1063,7 +1060,7 @@ function renderSetup() {
         <p>Kroog adds a few hooks to <code>${esc(tildePath(link.settingsPath || '~/.claude/settings.json'))}</code>. Every Claude Code chat on this Mac reads that file, including the VS Code and Cursor panels, so no plugin is needed. Kroog saves a backup first.</p>
         ${link.error ? `<p style="color:var(--error)">${esc(link.error)}</p>` : ''}
         ${demo ? '<p>The demo never touches your settings. Quit it and run <code>node bin/kroog.js link</code>.</p>' : `<div class="tools" style="margin:0"><button type="button" class="btn solid" id="do-link">${link.linked ? 'link again' : 'link now'}</button>${link.linked || link.partial ? '<button type="button" class="btn warn" id="do-unlink">unlink</button>' : ''}</div>`}
-        <p class="quiet">After linking, start a new chat in VS Code or Cursor. Chats that were already open show up once they do something.</p>
+        <p class="quiet">${info.claude && info.claude.registry ? `Claude Code reports ${plural(info.claude.open || 0, 'open chat')} right now. Chats that are open show up here at once; what they do arrives through the hooks.` : 'After linking, chats show up once they do something.'}</p>
         <ul class="events">${events.map((e) => `<li class="${lastEvents[e] ? 'yes' : ''}">${e}<span>${lastEvents[e] ? (dur(lastEvents[e]) === 'just now' ? 'just now' : `${dur(lastEvents[e])} ago`) : 'not yet'}</span></li>`).join('')}</ul>
       </div></section>
 
@@ -1103,10 +1100,6 @@ function renderSetup() {
         <div class="field"><label for="set-hold">Answer here first for</label><select id="set-hold">${[[0, "don't hold, only show them"], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute'], [120, '2 minutes']].map(([v, l]) => `<option value="${v}" ${hold === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       </div></section>
 
-      <section class="set"><h2>Drive</h2><div class="body">
-        <p>Turn on drive for a chat in its panel. When that chat finishes a turn, Kroog holds it so your next message goes straight in. The editor shows it as busy while held. Kroog can pass up to 7 messages in a row this way while the chat uses no tools (a Claude Code limit).</p>
-        <div class="field"><label for="set-drive">Hold a finished chat for up to</label><select id="set-drive">${[2, 5, 9].map((m) => `<option value="${m}" ${Number(st.driveMinutes) === m ? 'selected' : ''}>${m} minutes</option>`).join('')}</select></div>
-      </div></section>
 
       <section class="set"><h2>Notes <span class="state ${info.apiKey ? 'ok' : ''}">${info.apiKey ? 'key saved' : 'no key'}</span></h2><div class="body">
         <p>When a chat finishes a turn, the AI helper can turn its reply into a few short notes for the library. An API key is only needed if you pick "my Anthropic API key" above, or if Claude Code is not found.</p>
@@ -1164,10 +1157,10 @@ function renderLog() {
   const latest = feed(UI.logOpen ? 60 : 1);
   const top = latest[0];
   const line = top
-    ? `<span class="when">${esc(clock(top.step.t))}</span><span class="who">${esc(trim(top.s.title || 'Untitled chat', 40))}</span><span class="what">${esc(top.step.text)}</span>`
+    ? `<span class="when">${esc(clock(top.step.t))}</span><span class="who">${esc(trim(top.s.title || 'New chat', 40))}</span><span class="what">${esc(top.step.text)}</span>`
     : `<span class="what quiet">${esc(statusSentence())}</span>`;
   const panel = UI.logOpen
-    ? `<div class="logpanel"><ol class="log">${latest.map(({ s, step }) => `<li><time>${esc(clock(step.t))}</time><span class="who"><a class="linkish" href="#/lineage" data-open="${esc(s.id)}">${esc(trim(s.title || 'Untitled chat', 32))}</a></span><span>${esc(step.text)}</span></li>`).join('')}</ol></div>`
+    ? `<div class="logpanel"><ol class="log">${latest.map(({ s, step }) => `<li><time>${esc(clock(step.t))}</time><span class="who"><a class="linkish" href="#/lineage" data-open="${esc(s.id)}">${esc(trim(s.title || 'New chat', 32))}</a></span><span>${esc(step.text)}</span></li>`).join('')}</ol></div>`
     : '';
   bar.innerHTML = `${panel}<div class="logline">${line}<button type="button" class="linkish quiet toggle" data-log-toggle aria-expanded="${UI.logOpen}">${UI.logOpen ? 'hide log' : 'show log'}</button></div>`;
 }
@@ -1435,6 +1428,15 @@ window.addEventListener('kroog:brief-text', (e) => {
   h.aiText = null;
   toast('Added to a brief. Pick chats on the lineage to add more, then choose where it goes.');
   location.hash = '#/lineage';
+});
+
+// "Open chat" on the Brain map.
+window.addEventListener('kroog:open-chat', (e) => {
+  const id = e.detail && e.detail.id;
+  if (!id || !S.sessions.has(id)) return;
+  UI.route = 'lineage';
+  if (location.hash !== '#/lineage') location.hash = '#/lineage';
+  setTimeout(() => select(id), 60);
 });
 
 window.addEventListener('hashchange', route);

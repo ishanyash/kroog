@@ -65,34 +65,31 @@ export function editorUrl(s, prompt) {
   return url;
 }
 
+// Four states. "open" means the chat is open somewhere right now and waiting for you;
+// "done" means it is not open anywhere (Kroog or the editor can carry it on).
 export function bucket(s) {
   if (s.status === 'needs' || s.status === 'error') return 'needs';
-  if (s.status === 'working') return 'working';
-  if (s.status === 'ended') return 'quiet';
-  if (!s.holdingStop && Date.now() - (s.lastAt || 0) > QUIET_AFTER) return 'quiet';
+  if (s.status === 'working' && (s.live || Date.now() - (s.lastAt || 0) <= STALE_AFTER)) return 'working';
+  if (s.live || s.holdingStop) return 'open';
   return 'done';
 }
 
 // One word for where a chat stands, and the colour family it uses.
 export function look(s) {
   if (s.status === 'error') return { k: 'error', word: 'stopped' };
-  if (s.status === 'needs') return { k: 'needs', word: 'needs you' };
-  if (s.status === 'working') {
-    if (Date.now() - (s.lastAt || 0) > STALE_AFTER) return { k: 'quiet', word: 'no news' };
-    return { k: 'working', word: 'working' };
-  }
-  if (s.status === 'ended') return { k: 'quiet', word: 'closed' };
-  if (s.holdingStop) return { k: 'turn', word: 'your turn' };
-  if (bucket(s) === 'quiet') return { k: 'quiet', word: 'quiet' };
-  if (s.status === 'idle') return { k: 'quiet', word: 'ready' };
+  const b = bucket(s);
+  if (b === 'needs') return { k: 'needs', word: 'needs you' };
+  if (b === 'working') return { k: 'working', word: 'working' };
+  if (b === 'open') return { k: 'open', word: 'open' };
   return { k: 'done', word: 'done' };
 }
 
 export function whenText(s) {
-  if (s.status === 'needs' || s.status === 'error') return dur(s.since);
-  if (s.status === 'working') return Date.now() - (s.lastAt || 0) > STALE_AFTER ? dur(s.lastAt) : dur(s.since);
-  if (s.status === 'ended' || bucket(s) === 'quiet') return dayish(s.lastAt);
-  return clock(s.since);
+  const b = bucket(s);
+  if (b === 'needs') return dur(s.since);
+  if (b === 'working') return dur(s.since);
+  if (Date.now() - (s.lastAt || 0) > QUIET_AFTER) return dayish(s.lastAt);
+  return clock(s.lastAt || s.since);
 }
 
 export function firstLine(text, n = 160) {
@@ -107,14 +104,20 @@ export function lineText(s) {
   if (s.status === 'needs') return `asks: ${n.title || 'needs your input'}`;
   if (s.status === 'error') return `stopped: ${n.title || 'an error'}`;
   if (s.status === 'working') return s.now || 'working';
-  if (s.status === 'idle') return 'waiting for its first message';
-  if (s.status === 'ended') return firstLine(s.lastReply) || 'closed';
+  if (s.status === 'idle' && !s.lastReply) return 'waiting for its first message';
   return firstLine(s.lastReply) || 'finished its turn';
+}
+
+// A chat with no real message in it is a panel someone opened and closed: not shown.
+export function isEmptyChat(s) {
+  if (s.status === 'working' || s.status === 'needs') return false;
+  if (s.lastReply || (s.lastPrompt && !/^\s*</.test(s.lastPrompt))) return false;
+  return !(s.steps || []).some((st) => (st.kind === 'prompt' || st.kind === 'you') && st.text && !/^\s*</.test(st.text));
 }
 
 export function visibleSessions(S) {
   const ideOnly = S.settings.ideOnly !== false;
-  return [...S.sessions.values()].filter((s) => !s.archived && (!ideOnly || s.kind === 'ide' || s.kind === 'kroog' || s.kind === 'unknown'));
+  return [...S.sessions.values()].filter((s) => !s.archived && !isEmptyChat(s) && (!ideOnly || s.kind === 'ide' || s.kind === 'kroog' || s.kind === 'unknown'));
 }
 
 export function hiddenByScope(S) {

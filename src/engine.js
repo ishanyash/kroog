@@ -11,6 +11,8 @@ import { NO_OUTPUT, truncate, clip, firstLine, looksLikeQuestion, lastQuestion, 
 import { describeTool, describePermission, applyPlanTool, fileTouched } from './describe.js';
 import { detectApp } from './sources.js';
 import { Inbox, framed } from './inbox.js';
+import { Presence } from './presence.js';
+import { isJunkTitle, retitle } from './titles.js';
 
 const BRIEF_RE = /\[(?:Kroog|Crew) brief ([a-z0-9]{4,12})\]/i;
 // Claude Code ends a turn anyway after 8 Stop-hook blocks in a row with no tool call.
@@ -35,10 +37,12 @@ function lowerFirst(text) {
 }
 
 export class Engine {
-  constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null }) {
+  constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null, presence = null }) {
     this.store = store;
     // Each chat's Claude Code inbox, for messages from Kroog (see inbox.js).
     this.inbox = inbox || new Inbox();
+    // Claude Code's own registry of open chats (see presence.js).
+    this.presence = presence || new Presence({ dir: '' });
     // Set by Runner and AiHelper when they are created.
     this.runner = null;
     this.ai = null;
@@ -85,19 +89,74 @@ export class Engine {
     }
   }
 
+  // Open somewhere right now: Claude Code's registry says so, or we have a working inbox.
+  isLive(s) {
+    if (s.demoLive) return true;
+    if (this.runner && this.runner.isRunning(s.id)) return true;
+    if (this.presence.isOpen(s.id)) return true;
+    return s.status !== 'ended' && this.inbox.has(s.id);
+  }
+
   publicSession(s) {
     const { blockStreak, ...rest } = s;
+    const live = this.isLive(s);
     return {
       ...rest,
       waitingPermission: Boolean(this.waiter(s.id, 'permission')),
-      inbox: s.status !== 'ended' && this.inbox.has(s.id),
+      inbox: live && (this.inbox.has(s.id) || Boolean(this.runner && this.runner.isRunning(s.id)) || Boolean(s.demoLive)),
+      live,
+      kroogRunning: Boolean(this.runner && this.runner.isRunning(s.id)),
       holdingStop: Boolean(this.waiter(s.id, 'stop')),
     };
   }
 
+  // Bring Claude Code's registry into the chats: new chats it knows about, busy or idle,
+  // and the inbox of each. Returns the ids that changed, for the browser.
+  syncPresence() {
+    const changed = new Set(this.presence.refresh());
+    const store = this.store;
+    for (const e of this.presence.all()) {
+      const known = store.session(e.sid);
+      // Scripts (the Agent SDK, `claude -p`, Kroog's own AI helper calls) are not chats of
+      // yours unless Kroog already knows them.
+      if (!known && /^sdk/.test(e.entry)) continue;
+      const s = store.ensureSession(e.sid, e.cwd);
+      if (!known) {
+        this.applyMeta(s, { entry: e.entry });
+        s.startedAt = e.startedAt || Date.now();
+        s.lastAt = e.statusAt || Date.now();
+        s.status = e.busy ? 'working' : 'idle';
+        s.since = s.lastAt;
+        changed.add(e.sid);
+      }
+      if (e.socket) this.inbox.remember(e.sid, e.socket, e.token);
+      if (isJunkTitle(s.title) && retitle(s)) changed.add(e.sid);
+      // The registry's busy or idle corrects what the hooks may have missed.
+      const running = this.runner && this.runner.isRunning(e.sid);
+      if (e.busy && !running && (s.status === 'done' || s.status === 'idle' || s.status === 'ended')) {
+        s.now = s.now || 'Working';
+        store.setStatus(s, 'working', null);
+        changed.add(e.sid);
+      } else if (!e.busy && s.status === 'working' && !running && Date.now() - (s.lastAt || 0) > 20000 && !s.queue.length) {
+        s.now = '';
+        store.setStatus(s, 'done', null);
+        changed.add(e.sid);
+      } else if (!e.busy && s.status === 'ended') {
+        store.setStatus(s, 'done', null);
+        changed.add(e.sid);
+      }
+    }
+    for (const sid of changed) {
+      const s = store.session(sid);
+      if (s) store.emit('session', s);
+    }
+    if (changed.size) store.scheduleSave();
+    return [...changed];
+  }
+
   applyMeta(s, meta) {
-    // A chat Kroog runs keeps its "Kroog" label; its hooks would call it a script.
-    if (s.owner === 'kroog') return;
+    // A chat Kroog runs keeps its label; the hooks of its `claude -p` turn would call it a script.
+    if (s.owner === 'kroog' || (this.runner && this.runner.isRunning(s.id))) return;
     if (!meta || !(meta.entry || meta.bundle || meta.term)) return;
     const d = detectApp(meta);
     Object.assign(s, {
@@ -137,7 +196,8 @@ export class Engine {
     const s = store.ensureSession(sid, body.cwd);
     this.applyMeta(s, meta);
     if (meta && meta.inbox && event !== 'SessionEnd') this.inbox.remember(sid, meta.inbox, meta.inboxToken);
-    if (s.owner === 'kroog') s.hookSeen = true;
+    const byKroog = Boolean(this.runner && this.runner.isRunning(sid));
+    if (byKroog) s.hookSeen = true;
     if (body.permission_mode) s.permissionMode = body.permission_mode;
     if (s.archived && event === 'UserPromptSubmit') s.archived = false;
     const helper = body.agent_type || null;
@@ -147,7 +207,7 @@ export class Engine {
         s.source = body.source || '';
         if (body.session_title) s.title = truncate(body.session_title, 80);
         if (s.status === 'ended') store.setStatus(s, 'idle', null);
-        if (s.owner === 'kroog') { /* each turn Kroog runs opens and closes the chat; no need to say so */ } else if (body.source === 'resume') store.addStep(s, { kind: 'info', text: 'Chat resumed' });
+        if (byKroog) { /* each turn Kroog runs opens and closes the chat; no need to say so */ } else if (body.source === 'resume') store.addStep(s, { kind: 'info', text: 'Chat resumed' });
         else if (s.steps.length === 0) store.addStep(s, { kind: 'info', text: 'Chat opened' });
         store.touch(s);
         const memory = store.rememberedFor(s.cwd);
@@ -169,11 +229,12 @@ export class Engine {
         const viaKroog = isKroogMessage(raw);
         const prompt = cleanPrompt(raw) || raw;
         const fromUser = (!body.source || body.source === 'user') && !viaKroog;
-        if (fromUser && !s.title) s.title = titleFromPrompt(prompt);
+        if (fromUser && isJunkTitle(s.title)) {
+          const t = titleFromPrompt(prompt);
+          if (t && !isJunkTitle(t)) s.title = t;
+        }
         // Kroog already showed the prompt of a chat it runs (shorter, for a brief).
         if (!s.skipPromptStep) s.lastPrompt = clip(prompt, 2000);
-        // Older chats may have a title made from editor tags; fix it from a real prompt.
-        if (fromUser && /^</.test(s.title || '')) s.title = titleFromPrompt(prompt);
         s.blockStreak = 0;
         s.holding = null;
         s.now = 'Thinking';
@@ -232,7 +293,7 @@ export class Engine {
         const name = body.tool_name;
         const p = describePermission(name, body.tool_input || {});
         // A chat Kroog runs has no editor to ask instead, so Kroog waits longer for you.
-        const kroogRun = s.owner === 'kroog' && this.runner && this.runner.isRunning(sid);
+        const kroogRun = byKroog;
         const hold = !this.hasViewers() ? 0 : kroogRun ? 600 : Math.max(0, Math.min(Number(this.getSettings().permissionHoldSeconds) || 0, 540));
         // A newer request replaces an older one that is still waiting.
         this.resolveWaiter(sid, 'permission', NO_OUTPUT);
@@ -362,7 +423,7 @@ export class Engine {
         const asked = looksLikeQuestion(reply);
         const capped = s.drive && s.blockStreak >= BLOCK_CAP;
         const unwatched = s.drive && !capped && !this.hasViewers();
-        const holdHere = s.drive && !capped && !unwatched;
+        const holdHere = s.drive && Boolean(this.getSettings().driveEnabled) && !capped && !unwatched;
         store.setStatus(s, asked ? 'needs' : 'done', asked ? { kind: 'question', title: lastQuestion(reply), since: Date.now(), inEditor: !holdHere } : null);
         if (this.notes) this.notes.maybeWrite(s);
         if (this.ai) this.ai.afterTurn(s);
@@ -434,7 +495,7 @@ export class Engine {
         this.resolveWaiter(sid, 'stop', NO_OUTPUT);
         s.holding = null;
         s.now = '';
-        if (s.owner === 'kroog') {
+        if (byKroog) {
           store.touch(s);
           return NO_OUTPUT;
         }
@@ -525,13 +586,16 @@ export class Engine {
       return { ok: true, delivered: 'queued' };
     }
 
-    // Not running. A chat Kroog runs, or one closed in the editor, carries on here in Kroog.
+    // Not running anywhere. Kroog carries the same chat on here, one turn at a time; the
+    // editor can open it again afterwards. (With the registry we know it is not open; without
+    // it, only chats Kroog ran or saw close are safe to continue.)
     const canRun = runner && runner.available();
     if (canRun && mode === 'branch') return runner.run({ mode: 'fork', from: sid, prompt: body, label: stepText });
-    if (canRun && mode !== 'editor' && (s.owner === 'kroog' || s.status === 'ended')) {
+    const surelyClosed = this.presence.available ? !this.presence.isOpen(sid) : (s.owner === 'kroog' || s.status === 'ended');
+    if (canRun && mode !== 'editor' && surelyClosed) {
       return runner.run({ mode: 'resume', id: sid, prompt: body, label: stepText });
     }
-    if (s.status === 'ended') return { ok: false, error: 'This chat is closed. Resume it in the editor first.' };
+    if (s.status === 'ended') return { ok: false, error: 'This chat is closed. Open it in the editor first.' };
 
     // It's waiting for you and Kroog isn't holding it, so hand over to the editor.
     const url = this.deepLink(s, body);
@@ -687,7 +751,7 @@ export class Engine {
     if (inKroog) {
       const names = input.from.map((id) => this.store.session(id)).filter(Boolean).map((x) => `"${truncate(x.title || 'a chat', 60)}"`);
       const label = names.length ? `You sent a brief made from ${names.join(' and ')}` : 'You sent a brief from Kroog';
-      const resume = s.owner === 'kroog' || s.status === 'ended';
+      const resume = this.presence.available ? !this.presence.isOpen(s.id) : (s.owner === 'kroog' || s.status === 'ended');
       const r = this.runner.run(resume
         ? { mode: 'resume', id: s.id, prompt: promptFor(), label }
         : { mode: 'fork', from: s.id, prompt: promptFor(), label, input: { ...input, from: input.from.filter((x) => x !== s.id) } });

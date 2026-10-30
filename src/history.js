@@ -142,7 +142,7 @@ function toSession(sum) {
   const d = detectApp({ entry: sum.entry });
   // From history alone, VS Code and Cursor look the same.
   const place = sum.entry === 'claude-vscode' ? 'VS Code or Cursor' : d.place;
-  const title = sum.customTitle || sum.aiTitle || titleFromPrompt(sum.firstPrompt) || 'Untitled chat';
+  const title = sum.customTitle || sum.aiTitle || titleFromPrompt(sum.firstPrompt) || '';
   const steps = sum.steps.slice(-80);
   if (sum.lastReply) steps.push({ kind: 'reply', text: firstLine(sum.lastReply, 220), t: sum.lastAt });
   steps.unshift({ kind: 'info', text: 'Imported from Claude Code history', t: sum.startedAt || sum.lastAt });
@@ -266,7 +266,7 @@ export async function importRecent(store, opts = {}) {
     } else {
       let changed = false;
       for (const key of ['lastPrompt', 'lastReply']) if (!s[key] && data[key]) { s[key] = data[key]; changed = true; }
-      if ((!s.title || s.title === 'Untitled chat') && data.title) { s.title = data.title; changed = true; }
+      if ((!s.title || s.title === 'New chat') && data.title) { s.title = data.title; changed = true; }
       if (!(s.plan || []).length && data.plan.length) { s.plan = data.plan; changed = true; }
       if (!(s.files || []).length && data.files.length) { s.files = data.files; changed = true; }
       // Earlier steps go before the ones Kroog saw live.

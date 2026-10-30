@@ -9,6 +9,7 @@ import { listSources } from './sources.js';
 import { chunkMarkdown } from './chunk.js';
 import { Bm25, tokens } from './bm25.js';
 import { pickEmbedder, OllamaEmbedder } from './embed.js';
+import { buildMap, fileSimilarity, MAX_FILES, MAX_CHATS } from './map.js';
 
 export const KINDS = ['instructions', 'skill', 'agent', 'command', 'plan', 'memory', 'project-doc', 'note'];
 const RRF_K = 60;
@@ -78,6 +79,50 @@ export class SecondBrain {
     this.meta = meta;
     this.vectors = vectors;
     this.reindexKeywords();
+    this.mapCache = null;
+    this.simCache = null;
+  }
+
+  // Changes only when the indexed content or its vectors change (not on every rebuild).
+  indexKey() {
+    const parts = Object.entries(this.meta.files).map(([p, f]) => `${p}:${f.hash}`).sort();
+    const e = this.meta.embedder;
+    return hash(`${parts.join('|')}|${e ? `${e.name}/${e.model}/${e.dims}` : 'none'}|${this.meta.chunks.filter((c) => c.v >= 0).length}`);
+  }
+
+  // The brain as a map: file and chat nodes, joined by similarity and lineage. Cached until
+  // the index or the chats change. chats: [{ id, title, project, cwd, gist, keywords,
+  // lastReply, lastPrompt, status, lastAt, inputs }].
+  map(chats = [], { maxFiles = MAX_FILES, maxChats = MAX_CHATS } = {}) {
+    const list = (Array.isArray(chats) ? chats : []).filter((c) => c && c.id);
+    const indexKey = this.indexKey();
+    const key = `${indexKey}|${maxFiles}|${maxChats}|${list.map((c) => `${c.id}:${c.lastAt || 0}:${(c.inputs || []).length}`).sort().join(',')}`;
+    if (this.mapCache && this.mapCache.key === key) return this.mapCache.promise;
+    const promise = (async () => {
+      const paths = Object.entries(this.meta.files).sort((a, b) => (b[1].mtime || 0) - (a[1].mtime || 0)).slice(0, maxFiles).map(([p]) => p);
+      const simKey = `${indexKey}|${maxFiles}`;
+      if (!this.simCache || this.simCache.key !== simKey) this.simCache = { key: simKey, sim: fileSimilarity(this.meta, this.vectors, paths) };
+      const sim = this.simCache.sim;
+      let embedChats = null;
+      if (sim.mode === 'vectors') {
+        const emb = await this.queryEmbedder();
+        const dims = this.meta.embedder && this.meta.embedder.dims;
+        if (emb && dims && (!emb.model || !this.meta.embedder.model || emb.model === this.meta.embedder.model)) {
+          embedChats = async (texts) => {
+            const out = [];
+            for (let i = 0; i < texts.length; i += 32) {
+              const vecs = await emb.embed(texts.slice(i, i + 32).map((t) => emb.docText('chat', t)));
+              for (const v of vecs) out.push(v && v.length === dims ? v : null);
+            }
+            return out;
+          };
+        }
+      }
+      return buildMap({ meta: this.meta, vectors: this.vectors, chats: list, embedChats, maxFiles, maxChats, fileSim: sim });
+    })();
+    this.mapCache = { key, promise };
+    promise.catch(() => { if (this.mapCache && this.mapCache.promise === promise) this.mapCache = null; });
+    return promise;
   }
 
   reindexKeywords() {

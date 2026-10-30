@@ -10,7 +10,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function setup(settings = {}) {
   const store = new Store();
-  const all = { permissionHoldSeconds: 30, driveMinutes: 5, ...settings };
+  const all = { permissionHoldSeconds: 30, driveMinutes: 5, driveEnabled: true, ...settings };
   const engine = new Engine({ store, getSettings: () => all });
   const hook = (event, extra = {}, sid = 's1') => engine.handle(event, { session_id: sid, cwd: '/Users/me/code/app', ...extra }, VSCODE);
   return { store, engine, hook, settings: all };

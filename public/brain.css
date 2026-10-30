@@ -1,14 +1,41 @@
-/* Brain page (second brain search). Uses the tokens from styles.css. */
+/* Brain page: the map, its detail panel, and search. Uses the tokens from styles.css. */
+@import url("/brainmap.css");
+.brain-page { max-width: 80rem; }
 .brain-page .brain-sub { max-width: 72ch; margin: -6px 0 6px; font-size: var(--small); }
 .brain-page #brain-progress { min-height: 1.2em; margin: 0 0 4px; font-size: var(--tiny); color: var(--accent-ink); }
 .brain-page .brain-error { min-height: 0; margin: 0 0 8px; font-size: var(--small); color: var(--amber); }
 .brain-page .brain-error:empty { display: none; }
+.brain-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; margin: 6px 0 0; }
+.brain-top.has-detail { grid-template-columns: minmax(0, 1fr) 340px; }
+.brain-detail { min-height: 360px; height: 56vh; overflow: auto; padding: 14px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); font-size: var(--small); }
+.brain-detail[hidden] { display: none; }
+.brain-detail .bd-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.brain-detail .bd-head h2 { margin: 2px 0 2px; font-size: var(--text); font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.brain-detail .bd-kind { font-size: var(--tiny); color: var(--ink-3); }
+.brain-detail .bd-path { font-size: var(--tiny); overflow-wrap: anywhere; }
+.brain-detail .bd-close { flex: none; width: 26px; height: 26px; border: 0; background: none; color: var(--ink-3); font-size: 18px; line-height: 1; cursor: pointer; }
+.brain-detail .bd-close:hover { color: var(--ink); }
+.brain-detail .bd-acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.brain-detail .bd-text { margin: 0; padding: 10px 0 0; border-top: 1px solid var(--line); font: inherit; font-size: var(--tiny); line-height: 1.55; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.brain-detail .bd-text b { color: var(--ink); font-weight: 500; }
+.brain-detail .bd-gist { margin: 8px 0; color: var(--ink); line-height: 1.5; }
+.brain-detail .bd-gist .kw { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.brain-detail .bd-gist .kw i { font-style: normal; font-size: 11px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 3px; color: var(--ink-3); }
+.brain-detail .bd-sec { margin: 10px 0; }
+.brain-detail .bd-sec p { margin: 2px 0 0; color: var(--ink-2); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.brain-detail .bd-label { font-size: var(--tiny); color: var(--ink-3); }
+.brain-page .brain-mapline { margin: 8px 0 18px; font-size: var(--tiny); }
 .brain-page .brain-search { flex: 1 1 420px; max-width: 640px; }
 .brain-page .brain-search input { width: 100%; }
 .brain-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; margin-top: 8px; }
-@media (max-width: 860px) { .brain-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) {
+  .brain-grid { grid-template-columns: minmax(0, 1fr); }
+  .brain-top.has-detail { grid-template-columns: minmax(0, 1fr); }
+  .brain-detail { height: auto; min-height: 0; max-height: 50vh; }
+}
 .brain-hits { list-style: none; margin: 0 0 20px; padding: 0; }
-.brain-hit { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.brain-hit { padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.brain-hit:hover .bh-head b { color: var(--accent-ink); }
 .brain-hit:last-child { border-bottom: 0; }
 .brain-hit .bh-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .brain-hit .bh-head b { font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }

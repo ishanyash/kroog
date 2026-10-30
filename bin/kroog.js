@@ -6,10 +6,14 @@
 //   node bin/kroog.js unlink   remove Kroog's hooks again
 //   node bin/kroog.js status   show what's linked and where things live
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import { claudeDir, migrateFromCrew, ensureHome, paths, loadSettings, saveSettings, readToken, readApiKey, writeApiKey, removeApiKey, DEFAULT_SETTINGS } from '../src/config.js';
 import { link, unlink, linkStatus, refreshScript, hasOldCrewHooks } from '../src/link.js';
 import { Inbox } from '../src/inbox.js';
 import { doctor, printDoctor } from '../src/doctor.js';
+import { Presence } from '../src/presence.js';
+import { retitle } from '../src/titles.js';
 import { SecondBrain } from '../src/memory/index.js';
 import { runMcp, mcpAddArgs } from '../src/mcp.js';
 import { cleanEnv } from '../src/claude-cli.js';
@@ -25,7 +29,7 @@ import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -78,7 +82,11 @@ async function start({ demo }) {
   const token = readToken();
   const store = new Store({ file: demo ? null : p.state });
   const notes = new NoteWriter({ store, getKey: () => (demo ? null : readApiKey()), getSettings: () => settings });
-  const engine = new Engine({ store, getSettings: () => settings, notes, inbox: new Inbox({ file: demo ? null : p.inboxes }) });
+  // In the demo, an empty registry: no real chat is open, so "continue here" runs pretend turns.
+  const presence = new Presence({ dir: demo ? fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kroog-demo-')) : nodePath.join(claudeDir(), 'sessions') });
+  const engine = new Engine({ store, getSettings: () => settings, notes, inbox: new Inbox({ file: demo ? null : p.inboxes }), presence });
+  // Readable titles for chats whose title was made from editor tags by older versions.
+  if (!demo) for (const s of Object.values(store.data.sessions)) retitle(s);
   if (!demo) {
     try { if (refreshScript({ port })) console.log('Updated the hook relay script for this version of Kroog.'); } catch { /* not linked */ }
   }
@@ -104,7 +112,7 @@ async function start({ demo }) {
     link: linkStatus(),
     apiKey: demo ? false : Boolean(readApiKey()),
     notesError: notes.lastError,
-    claude: runner.status(),
+    claude: { ...runner.status(), registry: presence.available, open: presence.all().length },
     ai: ai.status(),
     brain: brain.status(),
     brainConnected,
@@ -187,6 +195,14 @@ async function start({ demo }) {
     },
     'brain-search': async ({ query = '', kinds = null, project } = {}) => ({ results: await brain.search(String(query).slice(0, 500), { kinds: Array.isArray(kinds) ? kinds : null, project }) }),
     'brain-recent': async () => ({ results: brain.recent(10) }),
+    'brain-map': async () => {
+      const chats = Object.values(store.data.sessions)
+        .filter((x) => !x.archived && (x.lastPrompt || x.lastReply))
+        .sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0)).slice(0, 200)
+        .map((x) => ({ id: x.id, title: x.title, project: x.project, cwd: x.cwd, gist: x.ai ? x.ai.gist : '', keywords: x.ai ? x.ai.keywords : [], lastReply: x.lastReply, lastPrompt: x.lastPrompt, status: x.status, lastAt: x.lastAt, live: engine.isLive(x), inputs: (x.inputs || []).map((i) => ({ kind: i.kind, from: i.from || [] })) }));
+      return { map: await brain.map(chats) };
+    },
+    'brain-read': async ({ path: file } = {}) => ({ text: brain.readFile(String(file || '')) }),
     'brain-build': async () => {
       brain.build().catch(() => {});
       return { message: 'Updating the brain. It takes a few seconds, longer the first time.' };
@@ -236,6 +252,8 @@ async function start({ demo }) {
       if (!flag('no-import')) {
         importRecent(store, { days: 7, limit: 40 })
           .then((r) => {
+            for (const s of Object.values(store.data.sessions)) retitle(s);
+            engine.syncPresence();
             if (r.added) console.log(`Imported ${r.added} recent chat${r.added === 1 ? '' : 's'} from Claude Code history (last 7 days).`);
             else if (!r.found) console.log('No chats from the last 7 days in Claude Code history.');
           })
@@ -255,6 +273,9 @@ async function start({ demo }) {
   const stopDemo = demo ? startDemo({ engine, store }) : null;
   brain.start();
   // Every minute, drop inboxes of chats that have closed, so "live" stays true.
+  // Claude Code's registry of open chats: read now and every few seconds.
+  engine.syncPresence();
+  if (!demo) setInterval(() => { try { engine.syncPresence(); } catch { /* registry hiccup */ } }, 4000).unref();
   const probeInboxes = async () => {
     for (const sid of await engine.inbox.probeAll()) {
       const s = store.session(sid);

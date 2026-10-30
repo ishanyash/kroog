@@ -103,8 +103,12 @@ export class Runner {
       if (source) this.engine.recordInput(s, { kind: 'continue', from: [source.id], words: 0 });
       if (input) this.engine.recordInput(s, input);
     }
+    // A chat Kroog created is Kroog's. A chat from the editor that Kroog carries on keeps its
+    // own label (VS Code, Cursor): it is still that chat, and the editor can open it again.
+    if (mode !== 'resume' || !s.app || s.app === 'Unknown app') {
+      Object.assign(s, { owner: 'kroog', app: 'Kroog', kind: 'kroog', place: 'Kroog', surface: 'kroog' });
+    }
     Object.assign(s, {
-      owner: 'kroog', app: 'Kroog', kind: 'kroog', place: 'Kroog', surface: 'kroog',
       editor: s.editor || this.getSettings().defaultEditor || 'vscode',
       archived: false, drive: false, holding: null, stopRequested: false,
       lastPrompt: clip(input && label ? label : text, 2000), now: 'Starting', hookSeen: false, skipPromptStep: true,

@@ -638,3 +638,20 @@ details.menu .menu-items button:hover, details.menu .menu-items button:focus-vis
 .composer .hint { margin: 0; font-size: 12px; color: var(--ink-3); }
 .composer .hint.warn-hint { color: var(--amber-ink); }
 @media (prefers-reduced-motion: reduce) { .convo .tl.st-running i, .convo .working-now i { animation: none; } }
+
+/* ---- lineage v0.8 ---- */
+/* Open: finished its turn and still open somewhere, waiting for you. Looks like done, with a live dot. */
+.k-open { --k: var(--ink-2); --k-soft: var(--paper-2); }
+.node.k-open { border-color: var(--line-2); }
+.node .st .w .live-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.node.mini .dot.live-dot { background: var(--accent); border-color: var(--accent); }
+.node.k-working .st .w .live-dot { display: none; }
+/* The status row stays on one line: "working [kroog] just now" was wrapping. */
+.stage .node .st { gap: 6px; align-items: center; }
+.stage .node .st .w, .stage .node .st .when { white-space: nowrap; }
+.stage .node .st .w { display: inline-flex; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.stage .node .st .w .tag-kroog { margin-left: 6px; }
+
+/* ---- states in the list (v0.8) ---- */
+.row .end .live-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.row.k-open { --k: var(--ink-2); }

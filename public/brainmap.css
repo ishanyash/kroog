@@ -1,0 +1,28 @@
+/* The brain map: a canvas with a legend, zoom buttons and a tooltip. Tokens from styles.css. */
+.brainmap { position: relative; min-height: 360px; height: 56vh; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; outline: none; }
+.brainmap:focus-visible { border-color: var(--accent); }
+.brainmap .bm-canvas { display: block; position: absolute; inset: 0; }
+.brainmap .bm-tip { position: absolute; z-index: 3; max-width: 280px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); font-size: var(--tiny); line-height: 1.45; color: var(--ink-2); pointer-events: none; }
+.brainmap .bm-tip[hidden] { display: none; }
+.brainmap .bm-tip b { display: block; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.brainmap .bm-tip span { display: block; color: var(--ink-3); }
+.brainmap .bm-tip em { display: block; margin-top: 4px; font-style: normal; color: var(--ink-2); }
+.brainmap .bm-legend { position: absolute; z-index: 2; left: 12px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; max-width: calc(100% - 140px); font-size: 11px; color: var(--ink-3); pointer-events: none; }
+.brainmap .bm-legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.brainmap .bm-g { display: inline-block; width: 8px; height: 8px; box-sizing: border-box; }
+.brainmap .bm-g-instructions { background: var(--ink); }
+.brainmap .bm-g-memory { background: var(--accent); }
+.brainmap .bm-g-skill { border: 1px solid var(--ink); }
+.brainmap .bm-g-plan { border: 1px dotted var(--ink); }
+.brainmap .bm-g-project-doc { background: var(--ink-2); width: 7px; height: 7px; }
+.brainmap .bm-g-note { background: var(--amber); border-radius: 50%; }
+.brainmap .bm-g-chat { width: 13px; height: 9px; border: 1px solid var(--ink-3); border-radius: 2px; }
+.brainmap .bm-ctl { position: absolute; z-index: 2; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+.brainmap .bm-btn { min-width: 26px; height: 26px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--paper); color: var(--ink-2); font: inherit; font-size: 13px; line-height: 1; cursor: pointer; }
+.brainmap .bm-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+.brainmap .bm-empty { position: absolute; z-index: 2; left: 50%; top: 45%; transform: translate(-50%, -50%); margin: 0; max-width: 32ch; text-align: center; font-size: var(--small); color: var(--ink-3); }
+.brainmap .bm-empty[hidden] { display: none; }
+@media (max-width: 760px) {
+  .brainmap { height: 48vh; min-height: 300px; }
+  .brainmap .bm-legend { max-width: calc(100% - 110px); font-size: 10px; gap: 2px 10px; }
+}

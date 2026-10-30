@@ -46,14 +46,25 @@ Keep the Terminal window with `start` open while you use Kroog. To update later,
   - a line ending in a ring is a branch
 - Hover over a chat for its one-line summary.
 
+### The four states
+
+Every chat is in one of four states:
+- **working**: busy right now
+- **needs you**: waiting for an answer (a permission, or a question)
+- **open**: finished its turn and still open in VS Code, Cursor or a terminal, waiting for you. A small dot marks open chats.
+- **done**: not open anywhere. You can still carry it on, from Kroog or from VS Code.
+
+Kroog reads Claude Code's own registry of open chats, so it knows which chats are open from the moment it starts. Chats with no messages in them (panels that were opened and closed) are hidden.
+
 ### A chat
 
 Click a chat to open its panel.
-- **At the top:** its title, and where it is. "Live in VS Code" means Kroog can message it. Below that, a one-line summary.
+- **At the top:** its title, where it is ("open in VS Code", or "not open now"), its project, and a one-line summary.
 - **In the middle:** the real conversation, read from Claude Code's own history: your messages, Claude's replies, and each step on one line. When it asks to edit a file or run a command, allow and deny show up here.
-- **At the bottom:** the message box. Under it, Kroog tells you where your message will go:
-  - **Live chat:** it goes straight in. If the chat is working, it reads your message after its current step. If it's idle, it starts on it right away, in VS Code. Your message shows as "sent" until the chat has it.
-  - **Not reachable:** the chat isn't open, or it opened before Kroog was running. Kroog says so and offers **open in VS Code**, with your message copied. After you send it one message there, Kroog can reach it. Kroog never quietly makes a copy of a chat.
+- **At the bottom:** the message box. Under it, Kroog says where your message goes:
+  - **open chat:** straight in. If it's working, it reads your message after its current step; if it's idle, it starts on it right away, in VS Code. Your message shows as "sent" until the chat has it.
+  - **done chat:** Kroog carries the same chat on, one turn at a time, with Claude Code on your Mac. VS Code can open it again afterwards. Permission questions show up in the panel.
+- **open in VS Code:** always there, at the top. For an open chat it switches to its tab; for a done chat it resumes it there.
 - **More (⋯):** hand off from this chat, start a branch here, summarise again, hide.
 
 In VS Code, a message from Kroog arrives as a message from another session. That's how Claude Code labels these messages, so a message from Kroog can never approve anything for you.
@@ -69,7 +80,9 @@ In VS Code, a message from Kroog arrives as a message from another session. That
 
 ### Brain
 
-The **brain** page searches:
+The **brain** page is a map of what Claude Code knows about your work, with your recent chats on it. Files and chats sit in their project's cluster and are linked when they are about the same things. Search highlights the matching nodes; click a node to read it, open it in VS Code, or add it to a brief. The results also appear as a list under the map.
+
+It indexes:
 - your `~/.claude/CLAUDE.md` and rules, skills, agents, commands and plans
 - Claude Code's own memory for each project (`~/.claude/projects/<project>/memory/`)
 - each project's `CLAUDE.md` and `.claude` docs
@@ -107,6 +120,7 @@ Add `--port 4878` to `link` and `start` to use another port.
 ## How it works
 
 - **Hooks.** `link` adds hooks to Claude Code's settings. Each one runs `~/.kroog/hook.sh`, which tells Kroog what the chat is doing and where its inbox is. When Kroog isn't running, the hook gives up in a moment and changes nothing.
+- **The registry.** Claude Code keeps a list of its running chats in `~/.claude/sessions/` (id, folder, busy or idle, inbox). Kroog reads it every few seconds. That's how a chat opened before Kroog started still shows as open.
 - **Inboxes.** Since Claude Code 2.1.224, every chat has a private inbox, a socket only your user can reach. Kroog sends your messages and briefs there.
 - **Conversations.** The conversation shown in a chat's panel comes from Claude Code's own history file for that chat.
 - **Chats Kroog starts.** These run Claude Code on your Mac (`claude -p`), with your usual login, settings and permission rules. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
@@ -120,7 +134,7 @@ Add `--port 4878` to `link` and `start` to use another port.
 
 ## Limits
 
-- Kroog can message a chat only after that chat has done something while Kroog was running, and only with Claude Code 2.1.224 or newer.
+- Messaging chats and seeing which are open need Claude Code 2.1.224 or newer.
 - **open in VS Code** for a chat Kroog started needs VS Code to have that project folder open. Kroog opens the folder first.
 - While Kroog holds a permission question, VS Code shows that chat as busy.
 - Claude Code's history format and hook behaviour can change between versions.

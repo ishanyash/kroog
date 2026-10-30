@@ -6,7 +6,7 @@
 // other weeks show as short stubs you can click to jump there. The key on each chat
 // starts a connection: click it, then click the chat to send it to. Pan by dragging,
 // zoom with the buttons, pinch or ctrl and scroll.
-import { $, $$, esc, trim, look, whenText, lineText, cellsHtml, dur, plural, folderName, tildePath, lineageEdges, lineageOf, bucket, EDITORS } from './util.js';
+import { $, $$, esc, trim, look, whenText, lineText, cellsHtml, dur, plural, folderName, tildePath, lineageEdges, lineageOf, EDITORS } from './util.js';
 
 const NODE_W = 208;
 const COL_PAD = 12;
@@ -20,7 +20,12 @@ const PAD_Y = 8;
 const SUB_GAP = 10;
 const SUB_H = 20;
 const TOP_SPACE = 70;
-const RANK = { needs: 0, working: 1, done: 2, quiet: 3 };
+// Lane order: chats that need you first, then working, then open, then done.
+const RANK = { needs: 0, error: 0, working: 1, open: 2, done: 3 };
+const rankOfState = (s) => RANK[look(s).k] ?? 3;
+const MAX_ZOOM = 2.5;
+const SIDE = 16;
+const BOTTOM_SPACE = 16;
 const DAY_MS = 86400000;
 
 const KEY_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4.2 4.2 0 0 0 6 0l3-3a4.2 4.2 0 0 0-6-6l-1 1"/><path d="M14 10a4.2 4.2 0 0 0-6 0l-3 3a4.2 4.2 0 0 0 6 6l1-1"/></svg>';
@@ -256,10 +261,12 @@ function buildModel(S, UI, visible) {
   return { all, sessions, byId, edges, stubs, pseudo, picked, ws, we, current, strip };
 }
 
+// Full size for anything alive or recent: working, needs you, open right now, selected,
+// picked for a brief, a link source, or active in the last two days of the shown week.
 function nodeMode(s, model, ctx) {
   if (s.id === ctx.selected || model.picked.has(s.id) || ctx.linkSrc.has(s.id)) return 'full';
-  const k = bucket(s);
-  if (k === 'working' || k === 'needs') return 'full';
+  const k = look(s).k;
+  if (k === 'working' || k === 'needs' || k === 'error' || s.live) return 'full';
   const ref = Math.min(Date.now(), model.we - 1);
   return (s.lastAt || 0) >= dayStart(ref) - DAY_MS ? 'full' : 'mini';
 }
@@ -310,7 +317,7 @@ function layout(model, sizes) {
     lanes.get(key).ids.push(s.id);
   }
   const keys = [...lanes.keys()];
-  const rankOf = (key) => Math.min(...lanes.get(key).ids.map((id) => RANK[bucket(byId.get(id))]));
+  const rankOf = (key) => Math.min(...lanes.get(key).ids.map((id) => rankOfState(byId.get(id))));
   const lastOf = (key) => Math.max(...lanes.get(key).ids.map((id) => byId.get(id).lastAt || 0));
   const fresh = keys.filter((k) => !L.laneOrder.includes(k)).sort((a, b) => rankOf(a) - rankOf(b) || lastOf(b) - lastOf(a));
   L.laneOrder = [...fresh, ...L.laneOrder.filter((k) => !fresh.includes(k))];
@@ -375,23 +382,27 @@ function chatNodeHtml(s, mode, ctx, early) {
   const src = ctx.linkSrc.has(s.id);
   const hov = L.linkHover === s.id && !src;
   const cls = `node k-${lk.k}${mode === 'mini' ? ' mini' : ''}${sel ? ' sel' : ''}${picked ? ' picked' : ''}${dim ? ' dim' : ''}${src ? ' link-src' : ''}${hov ? ' link-hover' : ''}`;
-  const label = `${s.title || 'Untitled chat'}. ${lk.word}. ${lineText(s)}`;
-  const kroog = s.owner === 'kroog' ? '<span class="tag tag-kroog">kroog</span>' : '';
+  const live = Boolean(s.live);
+  const label = `${s.title || 'New chat'}. ${lk.word}${live ? ', open now' : ''}. ${lineText(s)}`;
+  // The kroog tag means Kroog is running this chat's turn right now.
+  const kroog = s.kroogRunning ? '<span class="tag tag-kroog">kroog</span>' : '';
   const earlyMark = early ? `<span class="early" title="Started ${esc(fmtDay(early))}">← from ${esc(fmtDay(early))}</span>` : '';
   if (mode === 'mini') {
-    return { cls, label, tip: `${s.title || ''}${early ? ` (started ${fmtDay(early)})` : ''}`, html: `<span class="dot" aria-hidden="true"></span>${early ? '<span class="early-m" aria-hidden="true">←</span>' : ''}<span class="t">${esc(s.title || 'Untitled chat')}</span>${kroog}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}${picked ? '<span class="pickmark">in brief</span>' : ''}` };
+    // The state dot doubles as the live dot when the chat is open somewhere.
+    const dot = live ? '<span class="dot live-dot" title="open now" aria-hidden="true"></span>' : '<span class="dot" aria-hidden="true"></span>';
+    return { cls: `${cls}${live ? ' live' : ''}`, label, tip: `${s.title || ''}${early ? ` (started ${fmtDay(early)})` : ''}${live ? ' · open now' : ''}`, html: `${dot}${early ? '<span class="early-m" aria-hidden="true">←</span>' : ''}<span class="t">${esc(s.title || 'New chat')}</span>${kroog}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}${picked ? '<span class="pickmark">in brief</span>' : ''}` };
   }
   const n = s.needs || {};
   const asking = s.status === 'needs' && n.kind === 'permission' && s.waitingPermission;
   const acts = asking
     ? `<span class="acts"><button type="button" class="btn sm solid" data-allow="${esc(s.id)}">allow</button><button type="button" class="btn sm" data-deny="${esc(s.id)}">deny</button><span class="count" data-tick="deadline" data-deadline="${n.deadline || ''}" data-what="editor in" data-short="1">${esc(shortCount(n.deadline))}</span></span>`
     : '';
-  const drive = s.drive ? '<span class="tag">drive</span>' : '';
+  const liveDot = live ? '<i class="live-dot" title="open now" aria-hidden="true"></i>' : '';
   return {
-    cls,
+    cls: `${cls}${live ? ' live' : ''}`,
     label,
-    html: `${earlyMark}<span class="st"><span class="w">${esc(lk.word)}${kroog}</span><span class="when">${drive ? `${drive} ` : ''}<span data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}</span></span>
-      <span class="t">${esc(s.title || 'Untitled chat')}</span>
+    html: `${earlyMark}<span class="st"><span class="w">${liveDot}${esc(lk.word)}${kroog}</span><span class="when"><span data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}</span></span>
+      <span class="t">${esc(s.title || 'New chat')}</span>
       <span class="l">${esc(lineText(s))}</span>
       ${cellsHtml(s)}${acts}${picked ? '<span class="pickmark">in brief</span>' : ''}`,
   };
@@ -560,6 +571,9 @@ export function renderLineage(S, UI, visible) {
     fit(L.fitted);
     L.fitted = true;
     L.fitKey = key;
+  } else {
+    // The content may have grown or shrunk: keep the view on the week.
+    applyView();
   }
   scheduleAvoid();
 }
@@ -668,8 +682,8 @@ function drawEdges(model, lay, ctx) {
   for (const s of model.sessions) {
     const p = lay.pos.get(s.id);
     if (!p || p.endCol <= p.col) continue;
-    const k = bucket(s);
-    const cls = `trail${k === 'working' ? ' on' : k === 'needs' ? ' needs' : ''}${ctx.lit && !ctx.lit.has(s.id) ? ' dim' : ''}`;
+    const k = look(s).k;
+    const cls = `trail${k === 'working' ? ' on' : k === 'needs' || k === 'error' ? ' needs' : ''}${ctx.lit && !ctx.lit.has(s.id) ? ' dim' : ''}`;
     const y = p.y + Math.min(p.h / 2, 16);
     const endX = lay.cols[p.endCol].x + lay.cols[p.endCol].w / 2;
     parts.push(`<path class="${cls}" d="M ${p.x + NODE_W} ${y} H ${endX}"/>`);
@@ -844,8 +858,31 @@ function emptyHtml(S) {
 
 // ---------------------------------------------------------------- view: pan and zoom
 
+// The smallest zoom: the whole week just fits the width of the stage (never above 1).
+function minZoom(r = stageRect()) {
+  if (!L.bounds || !L.bounds.width) return 0.3;
+  return Math.min(1, Math.max(0.1, (r.width - SIDE * 2) / L.bounds.width));
+}
+
+// Keep the week on the stage. Sideways, the week can never leave the screen, and when it
+// all fits it sits centred with no drift. Up and down, you can't scroll above the day
+// headers or below the last lane; when the content is short it stays at the top.
+function clampView(view, r = stageRect()) {
+  if (!L.bounds || !L.bounds.width || !r.width) return view;
+  const k = Math.max(minZoom(r), Math.min(MAX_ZOOM, view.k));
+  const w = L.bounds.width * k;
+  const h = L.bounds.height * k;
+  let { x, y } = view;
+  if (w <= r.width - SIDE * 2) x = (r.width - w) / 2;
+  else x = Math.max(r.width - SIDE - w, Math.min(SIDE, x));
+  if (h <= r.height - TOP_SPACE - BOTTOM_SPACE) y = TOP_SPACE;
+  else y = Math.max(r.height - BOTTOM_SPACE - h, Math.min(TOP_SPACE, y));
+  return { x, y, k };
+}
+
 function applyView(glide = false) {
   if (!L.world) return;
+  L.view = clampView(L.view);
   L.world.style.transition = glide ? 'transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1)' : 'none';
   L.world.style.transform = `translate(${L.view.x}px, ${L.view.y}px) scale(${L.view.k})`;
   scheduleAvoid();
@@ -862,9 +899,9 @@ export function fit(glide = true, byYou = false) {
   if (byYou) L.userMoved = false;
   unhover();
   const r = stageRect();
-  const side = 16;
+  const side = SIDE;
   const w = L.bounds.width;
-  const k = Math.max(0.5, Math.min(1, (r.width - side * 2) / w));
+  const k = Math.max(0.5, minZoom(r));
   let x;
   if (w * k <= r.width - side * 2) x = (r.width - w * k) / 2;
   else {
@@ -887,9 +924,11 @@ export function zoomBy(factor, cx, cy) {
   const r = stageRect();
   const px = cx ?? r.width / 2;
   const py = cy ?? r.height / 2;
-  const k = Math.max(0.3, Math.min(1.6, L.view.k * factor));
+  const k = Math.max(minZoom(r), Math.min(MAX_ZOOM, L.view.k * factor));
+  if (k === L.view.k) return;
   const wx = (px - L.view.x) / L.view.k;
   const wy = (py - L.view.y) / L.view.k;
+  // Zoom about the pointer; applyView then keeps the week on the stage.
   L.view = { k, x: px - wx * k, y: py - wy * k };
   applyView(cx == null);
 }
@@ -988,7 +1027,7 @@ function bindStage() {
       const [a, b] = [...L.pointers.values()];
       const r = stageRect();
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      const target = Math.max(0.3, Math.min(1.6, L.pinch.k * (d / L.pinch.d)));
+      const target = Math.max(minZoom(r), Math.min(MAX_ZOOM, L.pinch.k * (d / L.pinch.d)));
       zoomBy(target / L.view.k, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
       return;
     }
@@ -1002,6 +1041,9 @@ function bindStage() {
     stage.classList.add('panning');
     L.view = { ...L.view, x: L.drag.vx + dx, y: L.drag.vy + dy };
     applyView();
+    // At an edge, move the drag's origin with it, so dragging back responds at once.
+    L.drag.vx = L.view.x - dx;
+    L.drag.vy = L.view.y - dy;
   });
   stage.addEventListener('pointerleave', () => {
     if (!L.linking) return;
