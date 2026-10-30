@@ -12,9 +12,11 @@
   --paper-2: #e3e0d8;
   --ink: #15191b;
   --ink-2: #3d4447;
-  --ink-3: #5f676a;
+  --ink-3: #565e61;
   --line: #cfcbc1;
   --line-2: #b5b0a4;
+  /* The edge of a field or control that must be seen (3:1), unlike a hairline. */
+  --edge: #817b6d;
   --accent: #1e6b60;
   --accent-ink: #15524a;
   --accent-soft: #d6e5df;
@@ -25,6 +27,12 @@
   --error-soft: #e8d5cc;
   --code-bg: #e6e3dc;
   --water-opacity: 0.34;
+  --focus: #1e6b60;
+  --pop-bg: #edebe5;
+  --shadow-pop: 0 6px 20px rgba(21, 25, 27, 0.14);
+  /* Spacing scale. */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 48px;
+  --dur-micro: 120ms; --dur-short: 200ms;
 
   --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --text: 14px;
@@ -37,15 +45,19 @@
   color-scheme: light;
 }
 
+/* Dark is a second rendering of the same system, not an inversion: paper stays tinted
+   (never black), surfaces step lighter as they rise, hairlines survive, the accent loses a
+   little chroma so it doesn't glare, and depth comes from lightness, not shadows. */
 [data-theme="dark"] {
-  --paper: #0e1517;
-  --paper-2: #141d20;
+  --paper: #0f1618;
+  --paper-2: #172225;
   --ink: #e4e1d7;
-  --ink-2: #a7ada6;
-  --ink-3: #737b76;
-  --line: #22302f;
-  --line-2: #2f3f40;
-  --accent: #62c4ac;
+  --ink-2: #aab0ab;
+  --ink-3: #889290;
+  --line: #283634;
+  --line-2: #364543;
+  --edge: #607372;
+  --accent: #5dbfa8;
   --accent-ink: #8fd9c6;
   --accent-soft: #143430;
   --amber: #d4ac62;
@@ -55,6 +67,9 @@
   --error-soft: #302421;
   --code-bg: #121b1d;
   --water-opacity: 0.46;
+  --focus: #8fd9c6;
+  --pop-bg: #172225;
+  --shadow-pop: 0 0 0 1px var(--line-2);
   color-scheme: dark;
 }
 
@@ -63,7 +78,7 @@
    ========================================================================== */
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow-x: clip; }
 body {
   margin: 0;
   background: var(--paper);
@@ -77,7 +92,9 @@ body {
 button { font: inherit; color: inherit; }
 a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
 a:hover { text-decoration-color: currentColor; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+::selection { background: var(--accent-soft); color: var(--ink); }
+:root { caret-color: var(--accent); scrollbar-color: var(--line-2) transparent; }
 ::selection { background: var(--accent-soft); color: var(--ink); }
 h1, h2, h3 { font-weight: 500; margin: 0; }
 p { margin: 0; }
@@ -100,17 +117,19 @@ code, pre { font-family: var(--mono); }
   padding: 5px 12px; border: 1px solid var(--ink); border-radius: 4px;
   background: var(--paper); color: var(--ink); font-size: 13px; line-height: 1.5;
   text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--dur-micro) ease, color var(--dur-micro) ease, border-color var(--dur-micro) ease, transform var(--dur-micro) ease;
+  min-height: 32px;
 }
+.btn:active { transform: translateY(1px); }
 .btn:hover { background: var(--ink); color: var(--paper); }
 .btn.solid { background: var(--ink); color: var(--paper); }
 .btn.solid:hover { background: var(--ink-2); border-color: var(--ink-2); }
-.btn.soft { border-color: var(--line-2); color: var(--ink-2); }
+.btn.soft { border-color: var(--edge); color: var(--ink-2); }
 .btn.soft:hover { background: var(--paper-2); color: var(--ink); border-color: var(--ink-3); }
 .btn.warn { border-color: var(--error); color: var(--error); }
 .btn.warn:hover { background: var(--error); color: var(--paper); }
 .btn.sm { padding: 1px 9px; font-size: var(--tiny); }
-.btn:disabled, .btn:disabled:hover { opacity: 0.4; cursor: default; background: var(--paper); color: var(--ink); border-color: var(--line-2); }
+.btn:disabled, .btn:disabled:hover { opacity: 0.55; cursor: not-allowed; transform: none; background: var(--paper); color: var(--ink); border-color: var(--line-2); }
 .icon-btn { width: 32px; height: 32px; display: inline-grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--ink-2); cursor: pointer; padding: 0; }
 .icon-btn:hover { color: var(--ink); background: var(--paper-2); }
 .linkish { display: inline; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-align: left; font-size: inherit; }
@@ -118,8 +137,8 @@ code, pre { font-family: var(--mono); }
 
 .pill {
   display: inline-flex; align-items: baseline; gap: 6px; padding: 2px 10px;
-  border: 1px solid var(--line-2); border-radius: 999px; background: var(--paper);
-  color: var(--ink-2); font-size: var(--small); line-height: 1.5; cursor: pointer; text-decoration: none;
+  border: 1px solid var(--edge); border-radius: 999px; background: var(--paper);
+  color: var(--ink-2); font-size: var(--small); line-height: 1.5; cursor: pointer; text-decoration: none; min-height: 28px;
 }
 .pill:hover { border-color: var(--ink); color: var(--ink); }
 .pill[aria-pressed="true"] { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
@@ -128,9 +147,11 @@ code, pre { font-family: var(--mono); }
 
 input[type="text"], input[type="search"], input[type="password"], textarea, select {
   font: inherit; font-size: 13px; color: var(--ink); background: var(--paper);
-  border: 1px solid var(--line-2); border-radius: 4px; padding: 6px 10px; width: 100%;
+  border: 1px solid var(--edge); border-radius: 4px; padding: 6px 10px; width: 100%; min-height: 32px;
 }
-input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
+/* The focus ring is an outline, inset, instant; the border never changes width or colour. */
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+input:disabled, textarea:disabled, select:disabled { opacity: 0.55; cursor: not-allowed; }
 textarea { resize: vertical; line-height: 1.55; }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
 label.check { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
@@ -254,7 +275,7 @@ label.check { display: inline-flex; align-items: center; gap: 9px; cursor: point
 .edges text.lit { fill: var(--accent-ink); }
 
 /* Captions and controls sit in the corners, like the type on a poster. */
-.cap { position: absolute; z-index: 2; font-size: var(--tiny); color: var(--ink-3); pointer-events: none; white-space: nowrap; background: var(--paper); padding: 2px 8px; margin: -2px -8px; }
+.cap { position: absolute; z-index: 2; font-size: var(--tiny); color: var(--ink-3); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 40px); background: var(--paper); padding: 2px 8px; margin: -2px -8px; }
 .cap:empty { display: none; }
 .cap.tl { left: 20px; top: 14px; }
 .cap.tr { right: 20px; top: 14px; }
@@ -386,8 +407,10 @@ details.fold[open] summary { margin-bottom: 8px; }
 .page-head h1 { font-size: var(--h1); line-height: 1.35; letter-spacing: -0.01em; margin-bottom: 6px; }
 .page-head .lead { color: var(--ink-2); max-width: 62ch; }
 .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 18px; }
-.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); border-radius: 4px; padding: 0 10px; background: var(--paper); width: min(22rem, 100%); }
+.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--edge); border-radius: 4px; padding: 0 10px; background: var(--paper); width: min(22rem, 100%); }
 .search svg { color: var(--ink-3); flex: none; }
+.search:focus-within { outline: 2px solid var(--focus); outline-offset: -2px; }
+.search input:focus-visible { outline: none; }
 .search input { border: 0; padding: 6px 0; background: none; }
 .search input:focus { border: 0; }
 .search:focus-within { border-color: var(--accent); }
@@ -408,7 +431,6 @@ details.fold[open] summary { margin-bottom: 8px; }
 .row .desc { display: block; color: var(--ink-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .meta { display: block; color: var(--ink-3); font-size: var(--small); }
 .row .end { color: var(--k-ink, var(--k)); font-size: var(--small); font-weight: 500; text-align: right; white-space: nowrap; }
-.row:hover .title { color: var(--accent-ink); }
 .row.sel .title { color: var(--accent-ink); }
 
 .lib { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 40px; align-items: start; }
@@ -446,9 +468,9 @@ details.fold[open] summary { margin-bottom: 8px; }
 .events li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .events li span { color: var(--ink-3); }
 .events li.yes span { color: var(--accent-ink); }
-.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
 .seg button { border: 0; background: var(--paper); padding: 4px 12px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
-.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button + button { border-left: 1px solid var(--edge); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .keyrow { display: flex; gap: 8px; width: min(32rem, 100%); }
 
@@ -524,7 +546,7 @@ details.fold[open] summary { margin-bottom: 8px; }
 .lane-label .lane-new:hover, .lane-label .lane-new:focus-visible { border-color: var(--line-2); color: var(--accent-ink); }
 
 /* ---- running chats and the AI helper (v0.5) ---- */
-.hovercard { position: fixed; z-index: 60; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14); font-size: var(--small); color: var(--ink-2); pointer-events: none; }
+.hovercard { position: fixed; z-index: 60; padding: 12px 14px; background: var(--pop-bg); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: var(--shadow-pop); font-size: var(--small); color: var(--ink-2); pointer-events: none; }
 .hovercard[hidden] { display: none; }
 .hovercard .hc-head { display: flex; justify-content: space-between; gap: 12px; font-size: var(--tiny); color: var(--ink-3); }
 .hovercard .hc-head .w { font-weight: 500; }
@@ -610,7 +632,7 @@ details.fold[open] summary { margin-bottom: 8px; }
 details.menu { position: relative; }
 details.menu > summary { list-style: none; cursor: pointer; width: 28px; height: 28px; display: grid; place-items: center; font-size: 18px; line-height: 1; color: var(--ink-2); }
 details.menu > summary::-webkit-details-marker { display: none; }
-details.menu .menu-items { position: absolute; right: 0; top: 32px; z-index: 20; min-width: 210px; display: grid; padding: 4px; background: var(--paper); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); }
+details.menu .menu-items { position: absolute; right: 0; top: 32px; z-index: 20; min-width: 210px; display: grid; padding: 4px; background: var(--pop-bg); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: var(--shadow-pop); }
 details.menu .menu-items button { text-align: left; border: 0; background: none; padding: 7px 10px; font: inherit; font-size: var(--small); color: var(--ink); cursor: pointer; border-radius: 3px; }
 details.menu .menu-items button:hover, details.menu .menu-items button:focus-visible { background: var(--paper-2); }
 .side-body.convo { display: flex; flex-direction: column; gap: 12px; }
@@ -694,3 +716,24 @@ details.menu .menu-items button:hover, details.menu .menu-items button:focus-vis
 .section-head .g-by { margin-left: 8px; font-size: 12px; }
 .section-head #groups-again { margin-left: auto; font-size: 12px; }
 .g-empty { margin: 0 0 18px; font-size: var(--small); }
+
+
+/* ---- the floor (v1.0): motion, focus, density ---- */
+/* Every animation and transition stands still when the system asks for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+}
+/* A 44px hit target on small controls, without growing them. */
+.btn.sm, .icon-btn, .link-key, .pill { position: relative; }
+.btn.sm::after, .icon-btn::after, .link-key::after, .pill::after { content: ""; position: absolute; inset: 50% auto auto 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+/* The link key shows when you look at a chat, not on every chat at once. */
+.node .link-key { opacity: 0; transition: opacity var(--dur-micro) ease; }
+.node:hover .link-key, .node:focus-within .link-key, .node.sel .link-key, .node.link-src .link-key, .stage.linking .node .link-key { opacity: 0.7; }
+.node .link-key:hover, .node .link-key:focus-visible { opacity: 1; }
+@media (hover: none) { .node .link-key { opacity: 0.55; } }
+/* The key sits by the zoom controls, out of the caption's way. */
+.stage .legend { top: auto; right: auto; left: 20px; bottom: 60px; margin: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; flex-wrap: wrap; max-width: calc(100% - 40px); gap: 14px; }
+@media (max-width: 760px) { .stage .legend { display: none; } }
+/* Hover is one signal per element. */
+.node:hover { border-color: var(--ink-3); }
+.row:hover { background: var(--paper-2); box-shadow: 0 0 0 8px var(--paper-2); }

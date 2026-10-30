@@ -5,7 +5,7 @@ import {
   visibleSessions, hiddenByScope, shortFile, folderName, tildePath, cellsHtml,
 } from './util.js';
 import { renderBrain } from './brain.js';
-import { mountLineage, unmountLineage, renderLineage, isMounted, fit, zoomBy, reveal, nextNeeding, setWater, themeChanged, shiftWeek } from './lineage.js';
+import { mountLineage, unmountLineage, renderLineage, isMounted, fit, zoomBy, reveal, nextNeeding, setBackground, themeChanged, shiftWeek } from './lineage.js';
 
 const S = { sessions: new Map(), notes: [], briefs: [], groups: [], settings: {}, info: {}, connected: false, lastEventAt: 0 };
 const UI = {
@@ -28,7 +28,14 @@ const store = {
   get(key, fallback) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, value); } catch { /* private window */ } },
 };
-const waterOn = () => store.get('kroog-water', 'on') !== 'off';
+// What moves behind the week view: the activity pixels (default), the fish, or nothing.
+// Before v1.0 the only choice was the water on or off; that choice carries over.
+const BACKGROUNDS = [['pixels', 'the activity field'], ['fish', 'the fish'], ['none', 'nothing']];
+const background = () => {
+  const b = store.get('kroog-bg', '');
+  if (b) return b;
+  return store.get('kroog-water', '') === 'off' ? 'none' : 'pixels';
+};
 // Kroog can run chats itself when it found Claude Code on this Mac.
 const canRun = () => Boolean(S.info.claude && S.info.claude.found);
 const aiOn = () => Boolean(S.info.ai && S.info.ai.provider && S.info.ai.provider !== 'off');
@@ -198,7 +205,7 @@ function renderAll(routeChanged) {
     if (!isMounted()) {
       view.classList.add('is-canvas');
       mountLineage(view, {
-        waterOn,
+        background,
         selected: () => UI.selected,
         clockText: () => clock(Date.now()),
         onBackground: () => {
@@ -242,7 +249,7 @@ function hoverCardHtml(s) {
   return `<div class="hc-head"><span class="w k-${lk.k}">${esc(lk.word)}</span><span class="when">${esc(whenText(s))}</span></div>
     <b class="hc-title">${esc(trim(s.title || 'New chat', 90))}</b>
     <div class="hc-body">${body}</div>
-    <div class="hc-foot">${esc(s.project || '')}${s.place ? ` · ${esc(s.place)}` : ''}${(s.files || []).length ? ` · ${plural(s.files.length, 'file')}` : ''}</div>`;
+    <div class="hc-foot"><span>${esc(s.project || '')}</span>${s.place ? `<span>${esc(s.place)}</span>` : ''}${(s.files || []).length ? `<span>${plural(s.files.length, 'file')}</span>` : ''}</div>`;
 }
 
 function keywordsHtml(ai) {
@@ -465,7 +472,7 @@ function placeName(s) {
 function whereLine(s) {
   if (kroogRunning(s)) return '<span class="live">kroog is starting it</span>';
   if (s.live) return `<span class="live">open in ${esc(placeName(s))}</span>`;
-  return `<span>not open now · last in ${esc(placeName(s))}</span>`;
+  return `<span>not open now, last in ${esc(placeName(s))}</span>`;
 }
 
 function sideHeadHtml(s) {
@@ -485,12 +492,12 @@ function sideHeadHtml(s) {
     ${ai && ai.gist ? `<div class="gistline"><span>${esc(ai.gist)}</span>${(ai.keywords || []).map((k) => `<i>${esc(k)}</i>`).join('')}</div>` : s.aiPending ? '<div class="gistline quiet">summarising<span class="dots"></span></div>' : ''}`;
 }
 
-// "started tuesday · 3 turns · 25 min"
+// "started tuesday, 3 turns"
 function spanText(s) {
   const parts = [`started ${dayish(s.startedAt)}`];
   const turns = Number(s.turns || 0) || (s.steps || []).filter((x) => x.kind === 'prompt').length;
   if (turns) parts.push(plural(turns, 'turn'));
-  return parts.join(' · ');
+  return parts.join(', ');
 }
 
 function chatLink(id) {
@@ -515,7 +522,7 @@ function cleanAsk(text) {
   return clipText(String(text || '').replace(/\[Kroog brief [a-z0-9]+\]/i, '').trim(), 700);
 }
 
-// Steps grouped by what they did: "12 edits · 8 reads · 3 commands · 2 searches".
+// Steps grouped by what they did: "12 edits, 8 reads, 3 commands, 2 searches".
 function toolTally(s) {
   const n = { edit: 0, read: 0, run: 0, search: 0, other: 0 };
   for (const st of s.steps || []) {
@@ -533,7 +540,7 @@ function toolTally(s) {
   if (n.run) bits.push(plural(n.run, 'command'));
   if (n.search) bits.push(plural(n.search, 'search', 'searches'));
   if (n.other) bits.push(`${n.other} other`);
-  return bits.join(' · ');
+  return bits.join(', ');
 }
 
 function profileHtml(s) {
@@ -650,7 +657,7 @@ function conversationHtml(s) {
 
 // A plain-text summary of a chat, for pasting anywhere.
 function profileText(s) {
-  const lines = [s.title || 'New chat', `${look(s).word} · ${s.project} · ${spanText(s)}`];
+  const lines = [s.title || 'New chat', `${look(s).word}, ${s.project}, ${spanText(s)}`];
   if (s.ai && s.ai.gist) lines.push('', s.ai.gist, (s.ai.keywords || []).join(', '));
   const prompts = (s.steps || []).filter((x) => x.kind === 'prompt').map((x) => x.text);
   if (prompts[0] || s.lastPrompt) lines.push('', 'Asked:', cleanAsk(prompts[0] || s.lastPrompt));
@@ -939,7 +946,7 @@ function groupsHtml() {
     const members = g.chats.map((id) => S.sessions.get(id)).filter(Boolean);
     return `<div class="group">
       <div class="g-head"><b>${esc(g.name)}</b><span class="quiet">${esc(g.why)}</span></div>
-      <ul class="g-chats">${members.map((s) => `<li><button type="button" class="linkish" data-open="${esc(s.id)}">${esc(trim(s.title || 'New chat', 60))}</button><span class="quiet">${esc(s.project)} · ${esc(look(s).word)} · ${esc(dayish(s.lastAt))}</span></li>`).join('')}</ul>
+      <ul class="g-chats">${members.map((s) => `<li><button type="button" class="linkish" data-open="${esc(s.id)}">${esc(trim(s.title || 'New chat', 60))}</button><span class="quiet">${esc(s.project)}, ${esc(look(s).word)}</span></li>`).join('')}</ul>
       <div class="g-acts"><button type="button" class="btn sm solid" data-group-new="${esc(g.id)}">new chat from these ${members.length}</button><button type="button" class="linkish quiet" data-group-dismiss="${esc(g.id)}">not related</button></div>
     </div>`;
   }).join('');
@@ -1081,7 +1088,7 @@ function renderSetup() {
     : 'Off. Kroog still works; chats just have no summaries, and briefs are put together without AI.';
 
   $('#view').innerHTML = `${demoLine()}<div class="page">
-    <header class="page-head"><div><h1>Setup</h1><p class="lead">Kroog runs on this Mac only. It watches your Claude Code chats, lets you answer them here, and never changes your code.</p></div></header>
+    <header class="page-head"><div><h1>Setup</h1><p class="lead">Kroog runs on this Mac only. It reads your Claude Code chats and never changes your code.</p></div></header>
     <div class="setup">
       <section class="set"><h2>Claude Code ${state}</h2><div class="body">
         <p>Kroog adds a few hooks to <code>${esc(tildePath(link.settingsPath || '~/.claude/settings.json'))}</code>. Every Claude Code chat on this Mac reads that file, including the VS Code and Cursor panels, so no plugin is needed. Kroog saves a backup first.</p>
@@ -1144,14 +1151,14 @@ function renderSetup() {
 
       <section class="set"><h2>Look</h2><div class="body">
         <div class="seg" role="group" aria-label="Theme">${[['system', 'match my Mac'], ['light', 'light'], ['dark', 'dark']].map(([k, l]) => `<button type="button" data-theme-choice="${k}" aria-pressed="${theme === k}">${l}</button>`).join('')}</div>
-        <label class="check"><input type="checkbox" id="set-water" ${waterOn() ? 'checked' : ''}><span>the water behind the lineage</span></label>
-        <p class="quiet">Fish from the ishanyash.com water. They stand still if your Mac is set to reduce motion.</p>
+        <div class="field"><label for="set-bg">Behind the week view</label><select id="set-bg">${BACKGROUNDS.map(([k, l]) => `<option value="${k}" ${background() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <p class="quiet">In the activity field, every step a working chat takes drops a run of cells under it (teal for a tool, hollow for an agent, amber when it asked you, red when it failed); chats that need you breathe amber. Everything behind the chats stands still if your Mac is set to reduce motion.</p>
       </div></section>
 
       <section class="set"><h2>Where things live</h2><div class="body">
         <p>Kroog's files: <code>${esc(tildePath((info.paths || {}).home || '~/.kroog'))}</code></p>
         <p>Claude Code settings: <code>${esc(tildePath((info.paths || {}).settings || '~/.claude/settings.json'))}</code></p>
-        <p>This page: <code>http://127.0.0.1:${esc(info.port || 4877)}</code>, on this Mac only. Version ${esc(info.version || '')}, draft.</p>
+        <p>This page: <code>http://127.0.0.1:${esc(info.port || 4877)}</code>, on this Mac only. Version ${esc(info.version || '')}.</p>
         <p class="quiet">Your chats stay on this Mac. The only thing Kroog sends anywhere is a note request to the Claude API, when you have added a key.</p>
       </div></section>
     </div>
@@ -1395,7 +1402,7 @@ document.addEventListener('change', async (e) => {
     case 'set-hold': await act(post('settings', { permissionHoldSeconds: Number(t.value) }), 'Saved.'); break;
     case 'set-drive': await act(post('settings', { driveMinutes: Number(t.value) }), 'Saved.'); break;
     case 'set-notes': await act(post('settings', { notesEnabled: t.checked }), t.checked ? 'Notes are on.' : 'Notes are off.'); break;
-    case 'set-water': store.set('kroog-water', t.checked ? 'on' : 'off'); setWater(t.checked); toast(t.checked ? 'The fish are back.' : 'Still water.'); break;
+    case 'set-bg': store.set('kroog-bg', t.value); setBackground(t.value); toast(t.value === 'fish' ? 'The fish are back.' : t.value === 'none' ? 'Still paper.' : 'The activity field is on.'); break;
     default: break;
   }
 });

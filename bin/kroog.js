@@ -30,7 +30,7 @@ import { importRecent } from '../src/history.js';
 import { Runner } from '../src/runner.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '0.9.0';
+const VERSION = '1.0.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);

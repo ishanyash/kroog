@@ -6,7 +6,8 @@
 // other weeks show as short stubs you can click to jump there. The key on each chat
 // starts a connection: click it, then click the chat to send it to. Pan by dragging,
 // zoom with the buttons, pinch or ctrl and scroll.
-import { $, $$, esc, trim, look, whenText, lineText, cellsHtml, dur, plural, folderName, tildePath, lineageEdges, lineageOf, EDITORS } from './util.js';
+import { $, $$, esc, trim, look, whenText, lineText, cellsHtml, cellClass, dur, plural, folderName, tildePath, lineageEdges, lineageOf, EDITORS } from './util.js';
+import { startField } from './field.js';
 
 const NODE_W = 208;
 const COL_PAD = 12;
@@ -25,7 +26,8 @@ const RANK = { needs: 0, error: 0, working: 1, open: 2, done: 3 };
 const rankOfState = (s) => RANK[look(s).k] ?? 3;
 const MAX_ZOOM = 2.5;
 const SIDE = 16;
-const BOTTOM_SPACE = 16;
+// Room under the last lane, so a working chat at the bottom has somewhere for its stream to fall.
+const BOTTOM_SPACE = 150;
 const DAY_MS = 86400000;
 
 const KEY_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4.2 4.2 0 0 0 6 0l3-3a4.2 4.2 0 0 0-6-6l-1 1"/><path d="M14 10a4.2 4.2 0 0 0-6 0l-3 3a4.2 4.2 0 0 0 6 6l1-1"/></svg>';
@@ -38,8 +40,14 @@ const L = {
   band: null,
   layer: null,
   overlay: null,
+  // What moves behind the chats: 'pixels' (the activity field), 'fish' (the water) or 'none'.
+  bg: 'pixels',
+  field: null,
   water: null,
   waterOn: false,
+  probe: null,
+  edgeD: [],
+  feedTimer: null,
   view: { x: 0, y: 0, k: 1 },
   fitted: false,
   userMoved: false,
@@ -115,8 +123,10 @@ function activeIn(s, ws, we) {
 export function mountLineage(container, hooks) {
   L.hooks = hooks;
   container.innerHTML = `<div class="stage" id="stage" role="region" aria-label="Lineage of your chats, one week at a time">
-    <canvas class="water" aria-hidden="true"></canvas>
+    <canvas class="field" aria-hidden="true" hidden></canvas>
+    <canvas class="water" aria-hidden="true" hidden></canvas>
     <div class="world" id="world"><div class="days" id="days" aria-hidden="true"></div><svg class="edges" id="edges" aria-hidden="true"></svg><div id="layer"></div><svg class="band" id="band" aria-hidden="true"></svg></div>
+    <svg class="probe" aria-hidden="true" width="1" height="1"></svg>
     <div id="overlay"></div>
   </div>`;
   L.root = container;
@@ -127,17 +137,23 @@ export function mountLineage(container, hooks) {
   L.layer = $('#layer', container);
   L.days = $('#days', container);
   L.overlay = $('#overlay', container);
+  L.probe = $('.probe', container);
   L.els = new Map();
   L.pos = new Map();
+  L.edgeD = [];
   if (L.weekStart == null) L.weekStart = mondayOf(Date.now());
   bindStage();
-  setWater(hooks.waterOn());
+  setBackground(hooks.background ? hooks.background() : 'pixels');
   applyView();
 }
 
 export function unmountLineage() {
   unhover();
   if (L.water) { L.water.destroy(); L.water = null; }
+  if (L.field) { L.field.destroy(); L.field = null; }
+  clearInterval(L.feedTimer);
+  L.feedTimer = null;
+  L.probe = null;
   L.stage = null;
   L.root = null;
 }
@@ -146,21 +162,49 @@ export function isMounted() {
   return Boolean(L.stage && document.body.contains(L.stage));
 }
 
-// The water behind the lineage: the fish.
-export function setWater(on) {
-  L.waterOn = Boolean(on);
+// What moves behind the chats. 'pixels' is the activity field: cells that show what each
+// chat is doing. 'fish' is the water from ishanyash.com. 'none' is still paper. The choice
+// is kept until the lineage is mounted again, and the two canvases never show together.
+export function setBackground(mode) {
+  L.bg = mode === 'fish' || mode === 'none' ? mode : 'pixels';
+  L.waterOn = L.bg === 'fish';
   if (!L.stage) return;
-  if (L.waterOn) {
-    if (!L.water && window.KroogWater) L.water = window.KroogWater.start($('.water', L.stage));
+  const water = $('.water', L.stage);
+  const field = $('.field', L.stage);
+  if (L.bg === 'fish') {
+    water.hidden = false;
+    if (!L.water && window.KroogWater) L.water = window.KroogWater.start(water);
     scheduleAvoid();
   } else if (L.water) {
     L.water.destroy();
     L.water = null;
   }
+  if (L.bg !== 'fish') water.hidden = true;
+  if (L.bg === 'pixels') {
+    field.hidden = false;
+    if (!L.field) L.field = startField(field);
+    if (!L.feedTimer) L.feedTimer = setInterval(scheduleFeed, 2000);
+    scheduleFeed();
+  } else {
+    if (L.field) { L.field.destroy(); L.field = null; }
+    clearInterval(L.feedTimer);
+    L.feedTimer = null;
+    field.hidden = true;
+  }
+}
+
+export function background() {
+  return L.bg;
+}
+
+// The old switch for the water: on means fish, off means nothing behind the chats.
+export function setWater(on) {
+  setBackground(on ? 'fish' : 'none');
 }
 
 export function themeChanged() {
   if (L.water) L.water.setTheme();
+  if (L.field) L.field.setTheme();
 }
 
 // ---------------------------------------------------------------- weeks
@@ -390,7 +434,7 @@ function chatNodeHtml(s, mode, ctx, early) {
   if (mode === 'mini') {
     // The state dot doubles as the live dot when the chat is open somewhere.
     const dot = live ? '<span class="dot live-dot" title="open now" aria-hidden="true"></span>' : '<span class="dot" aria-hidden="true"></span>';
-    return { cls: `${cls}${live ? ' live' : ''}`, label, tip: `${s.title || ''}${early ? ` (started ${fmtDay(early)})` : ''}${live ? ' · open now' : ''}`, html: `${dot}${early ? '<span class="early-m" aria-hidden="true">←</span>' : ''}<span class="t">${esc(s.title || 'New chat')}</span>${kroog}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}${picked ? '<span class="pickmark">in brief</span>' : ''}` };
+    return { cls: `${cls}${live ? ' live' : ''}`, label, tip: `${s.title || ''}${early ? ` (started ${fmtDay(early)})` : ''}${live ? ', open now' : ''}`, html: `${dot}${early ? '<span class="early-m" aria-hidden="true">←</span>' : ''}<span class="t">${esc(s.title || 'New chat')}</span>${kroog}<span class="when" data-tick="when" data-id="${esc(s.id)}">${esc(whenText(s))}</span>${linkKey(s.id)}${picked ? '<span class="pickmark">in brief</span>' : ''}` };
   }
   const n = s.needs || {};
   const asking = s.status === 'needs' && n.kind === 'permission' && s.waitingPermission;
@@ -576,6 +620,7 @@ export function renderLineage(S, UI, visible) {
     applyView();
   }
   scheduleAvoid();
+  scheduleFeed();
 }
 
 function drawLanes(lay) {
@@ -693,6 +738,7 @@ function drawEdges(model, lay, ctx) {
     }
   }
 
+  const edgeD = [];
   for (const e of model.edges) {
     const a = lay.pos.get(e.from);
     const b = lay.pos.get(e.to);
@@ -701,6 +747,7 @@ function drawEdges(model, lay, ctx) {
     const dim = ctx.lit && !lit ? ' dim' : '';
     const c = route(a, b, e.from, e.to, lay);
     const kind = e.kind === 'memory' ? 'memory' : e.kind === 'continue' ? 'continue' : 'brief';
+    edgeD.push({ from: e.from, to: e.to, d: c.d });
     parts.push(`<path class="${kind}${lit}${dim}" d="${c.d}"/>`);
     const inX = c.inX ?? b.x;
     parts.push(port(a.x + NODE_W, mid(a), `out${lit}`));
@@ -738,6 +785,7 @@ function drawEdges(model, lay, ctx) {
   L.svg.setAttribute('width', lay.width);
   L.svg.setAttribute('height', lay.height);
   L.svg.innerHTML = parts.join('') + labels.join('');
+  L.edgeD = edgeD;
 }
 
 // The labels on links to other weeks, as buttons that jump to that week.
@@ -756,7 +804,7 @@ function drawStubs(model, lay) {
     b.className = `week-stub ${st.side}`;
     b.dataset.weekJump = String(st.t);
     const title = trim(st.other.title || 'a chat', 26);
-    b.textContent = `${st.dir === 'from' ? 'from' : 'to'} ${title} · ${fmtDay(st.t)}`;
+    b.textContent = `${st.dir === 'from' ? 'from' : 'to'} ${title}, ${fmtDay(st.t)}`;
     b.title = `${st.dir === 'from' ? 'Came from' : 'Led to'} "${st.other.title || 'a chat'}". Go to that week.`;
     const y = p.y + p.h / 2 + 4 + n * 18;
     if (st.side === 'left') b.style.transform = `translate(${PAD_X - 4}px, ${y}px)`;
@@ -831,11 +879,11 @@ function renderOverlay(S, UI, model) {
   const files = new Set(sessions.flatMap((s) => s.files || [])).size;
   if (agents) digest.push(plural(agents, 'agent'));
   if (files) digest.push(plural(files, 'file'));
-  const tl = sessions.length ? `${plural(sessions.length, 'chat')} in ${plural(projects, 'project')} this week${digest.length ? ` · ${digest.join(' · ')}` : ''}` : '';
+  const tl = sessions.length ? `${plural(sessions.length, 'chat')} in ${plural(projects, 'project')} this week${digest.length ? `: ${digest.join(', ')}` : ''}` : '';
   const picking = UI.handoff.active;
   let html = '';
   if (model.all.length) html += weekBarHtml(model);
-  html += `<div class="cap tl">${esc(tl)}${demo ? `${tl ? ' · ' : ''}these chats are fake, so try everything` : ''}</div><div class="cap tr" data-tick="clock"></div>`;
+  html += `<div class="cap tl">${esc(tl)}${demo ? `${tl ? '. ' : ''}These chats are fake, so try everything` : ''}</div><div class="cap tr" data-tick="clock"></div>`;
   if (model.all.length) html += `<div class="ctl bl" role="group" aria-label="Zoom"><button type="button" class="btn sq soft" data-zoom="out" aria-label="Zoom out">−</button><button type="button" class="btn sq soft" data-zoom="in" aria-label="Zoom in">+</button><button type="button" class="btn soft" data-zoom="fit">fit</button></div>`;
   if (L.linking) {
     const n = L.linking.sources.length;
@@ -896,6 +944,7 @@ function applyView(glide = false) {
   L.world.style.transition = glide ? 'transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1)' : 'none';
   L.world.style.transform = `translate(${L.view.x}px, ${L.view.y}px) scale(${L.view.k})`;
   scheduleAvoid();
+  scheduleFeed();
 }
 
 function stageRect() {
@@ -1163,4 +1212,63 @@ function scheduleAvoid() {
     }
     L.water.setAvoid(boxes);
   });
+}
+
+// ---------------------------------------------------------------- the field: what each chat is doing
+
+const RATE_WINDOW = 120000;
+
+// Tells the activity field where every chat is on the stage and what it is doing, so the
+// pixels behind can follow. Coalesced to one call per frame; also every two seconds, so
+// the pace of a working chat keeps up without a render.
+let feedQueued = false;
+function scheduleFeed() {
+  if (!L.field || feedQueued) return;
+  feedQueued = true;
+  requestAnimationFrame(() => {
+    feedQueued = false;
+    if (L.field && L.stage) feedField();
+  });
+}
+
+function feedField() {
+  const { x, y, k } = L.view;
+  const byId = L.last ? L.last.model.byId : new Map();
+  const now = Date.now();
+  const nodes = [];
+  for (const [id, p] of L.pos) {
+    const s = byId.get(id);
+    if (!s) continue;
+    let rate = 0;
+    for (const st of s.steps || []) if (st && st.t >= now - RATE_WINDOW) rate += 1;
+    const agents = Object.values(s.helpers || {}).filter((h) => h && h.state === 'working').length;
+    // The newest steps, each with the style its cell takes, so the field can drop one per step.
+    const recent = (s.steps || []).slice(-8).map((st) => ({ t: st.t || 0, c: cellClass(st) })).filter((st) => st.c);
+    nodes.push({
+      id,
+      // The box plus its agents row, so a stream starts under the agents, not through them.
+      rect: { left: p.x * k + x, top: p.y * k + y, width: NODE_W * k, height: (p.h + (p.sub || 0)) * k },
+      state: look(s).k,
+      rate,
+      agents,
+      recent,
+      live: Boolean(s.live),
+    });
+  }
+  // Lines between chats, as paths the field can walk along (world coordinates; it applies the view).
+  const edges = [];
+  if (L.probe) {
+    const paths = L.probe.children;
+    L.edgeD.forEach((e, i) => {
+      let el = paths[i];
+      if (!el) {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        L.probe.append(el);
+      }
+      if (el.getAttribute('d') !== e.d) el.setAttribute('d', e.d);
+      edges.push({ from: e.from, to: e.to, path: el });
+    });
+    while (paths.length > L.edgeD.length) paths[paths.length - 1].remove();
+  }
+  L.field.update(nodes, edges, { x, y, k });
 }

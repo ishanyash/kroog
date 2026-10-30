@@ -1,7 +1,7 @@
 {
   "name": "kroog",
-  "version": "0.9.0",
-  "description": "Kroog: a local board for the Claude Code chats in your editor. Watch them, approve their requests and send them messages from a browser tab.",
+  "version": "1.0.0",
+  "description": "Kroog: the map of your Claude Code chats. See what each chat is about, what it did and where it came from, and start the next one with the right context. Runs only on your Mac.",
   "type": "module",
   "private": true,
   "bin": {

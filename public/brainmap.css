@@ -1,8 +1,9 @@
 /* The brain map: a canvas with a legend, zoom buttons and a tooltip. Tokens from styles.css. */
-.brainmap { position: relative; min-height: 360px; height: 56vh; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; outline: none; }
+.brainmap { position: relative; min-height: 360px; height: 56vh; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.brainmap:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .brainmap:focus-visible { border-color: var(--accent); }
 .brainmap .bm-canvas { display: block; position: absolute; inset: 0; }
-.brainmap .bm-tip { position: absolute; z-index: 3; max-width: 280px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); font-size: var(--tiny); line-height: 1.45; color: var(--ink-2); pointer-events: none; }
+.brainmap .bm-tip { position: absolute; z-index: 3; max-width: 280px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--line-2); border-radius: 4px; box-shadow: var(--shadow-pop); background: var(--pop-bg); font-size: var(--tiny); line-height: 1.45; color: var(--ink-2); pointer-events: none; }
 .brainmap .bm-tip[hidden] { display: none; }
 .brainmap .bm-tip b { display: block; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
 .brainmap .bm-tip span { display: block; color: var(--ink-3); }

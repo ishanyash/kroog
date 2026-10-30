@@ -142,16 +142,23 @@ export function tildePath(path) {
 
 // One cell per step, newest last: p prompt, o tool done, r running, f failed,
 // a asked you, y you answered, e replied, h a helper's step.
+// The cell a step shows as: p you asked, o a step, r the running step, h an agent's step,
+// a it asked you, f it failed, y a message from you, e a reply. Null for steps with no cell.
+export function cellClass(step) {
+  if (!step) return null;
+  if (step.kind === 'prompt') return 'p';
+  if (step.kind === 'tool') return step.helper ? 'h' : step.state === 'failed' ? 'f' : step.state === 'running' ? 'r' : 'o';
+  if (step.kind === 'ask') return 'a';
+  if (step.kind === 'you') return 'y';
+  if (step.kind === 'reply') return 'e';
+  if (step.kind === 'error') return 'f';
+  return null;
+}
+
 export function cellsFor(s, max = 28) {
   const out = [];
   for (const step of s.steps || []) {
-    let c = null;
-    if (step.kind === 'prompt') c = 'p';
-    else if (step.kind === 'tool') c = step.helper ? 'h' : step.state === 'failed' ? 'f' : step.state === 'running' ? 'r' : 'o';
-    else if (step.kind === 'ask') c = 'a';
-    else if (step.kind === 'you') c = 'y';
-    else if (step.kind === 'reply') c = 'e';
-    else if (step.kind === 'error') c = 'f';
+    const c = cellClass(step);
     if (c) out.push(c);
   }
   // Only the newest running step shows as running.

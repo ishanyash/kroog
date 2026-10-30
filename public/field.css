@@ -1,0 +1,29 @@
+/* The activity field: the pixel canvas behind the chats on the week view. It sits under the
+   world (chats, lines, day columns) and never takes the pointer. The fish canvas keeps its
+   own rules in styles.css; the two never show together. */
+.stage .field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: block;
+}
+
+.stage .field[hidden],
+.stage .water[hidden] {
+  display: none;
+}
+
+/* Where the field measures the lines between chats. Rendered, so paths have a length;
+   never seen. */
+.stage .probe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}

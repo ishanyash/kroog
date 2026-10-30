@@ -46,6 +46,14 @@ Keep the Terminal window with `start` open while you use Kroog. To update later,
   - a line ending in a ring is a branch
 - Hover over a chat for its one-line summary.
 
+### What moves behind the chats
+
+The week view sits on a field of pixels that shows what is going on right now. Every step a working chat takes drops a short run of cells under its box: teal for a tool call, a hollow cell for an agent's, amber when it asked you, red when a step failed. Between steps a slow trickle keeps the stream alive. A chat that needs you breathes amber; an open chat blinks now and then; a cell travels along the line into a chat that is working from one it came from. When nothing is happening the field is a calm, sparse static, and it stands still altogether if your Mac is set to reduce motion. In **Setup** you can swap the field for the fish from ishanyash.com, or for still paper.
+
+### Light and dark
+
+Kroog follows your Mac, or pick light or dark at the top right. Dark is its own rendering, not an inversion: tinted paper, lighter surfaces as they rise, and a calmer accent. Both modes keep every bit of text at 4.5:1 contrast and every edge at 3:1, and `npm test` checks that.
+
 ### The four states
 
 Every chat is in one of four states:
@@ -153,3 +161,4 @@ Add `--port 4878` to `link` and `start` to use another port.
 
 - The font is IBM Plex Mono, under the SIL Open Font License (`public/fonts/LICENSE-IBM-Plex.txt`).
 - The fish come from the [ascii-sharks](https://github.com/stackedlol/ascii-sharks) ocean (MIT License, `public/water-LICENSE.txt`), as set up for ishanyash.com, with the sharks left out.
+- The look follows the floor set by [Hallmark](https://github.com/nutlope/hallmark) (MIT License): colours and type as tokens, contrast in both modes, visible focus, no animated layout, and motion that stops when you ask it to. `test/style.test.js` keeps those rules.

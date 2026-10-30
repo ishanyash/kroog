@@ -562,9 +562,9 @@ export function mountBrainMap(container, api = {}) {
   function showTip(n, sx, sy) {
     if (!n) { tip.hidden = true; return; }
     const esc = (v) => String(v || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const kind = n.type === 'chat' ? `chat · ${n.status}` : KIND_LABEL[n.kind] || n.kind;
-    const extra = n.type === 'chat' ? (n.gist || '') : (n.headings || []).slice(0, 3).join(' · ');
-    tip.innerHTML = `<b>${esc(n.title)}</b><span>${esc(kind)} · ${esc(n.project)}</span>${extra ? `<em>${esc(extra)}</em>` : ''}`;
+    const kind = n.type === 'chat' ? `chat, ${n.status}` : KIND_LABEL[n.kind] || n.kind;
+    const extra = n.type === 'chat' ? (n.gist || '') : (n.headings || []).slice(0, 3).join(' / ');
+    tip.innerHTML = `<b>${esc(n.title)}</b><span>${esc(kind)}, ${esc(n.project)}</span>${extra ? `<em>${esc(extra)}</em>` : ''}`;
     tip.hidden = false;
     const tw = tip.offsetWidth;
     const th = tip.offsetHeight;

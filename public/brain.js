@@ -88,7 +88,7 @@ function mapLine() {
   const files = m.nodes.filter((n) => n.type === 'file').length;
   const chats = m.nodes.length - files;
   const how = m.mode === 'vectors' ? `linked by meaning${m.embedder && m.embedder !== 'vectors' ? ` (${m.embedder})` : ''}` : 'linked by keyword';
-  return `${files} files, ${chats} chats, ${m.edges.length} links · ${how}${m.truncated ? ' · only the newest files are shown' : ''}. Click a node to read it; drag to move; scroll to zoom.`;
+  return `${files} files, ${chats} chats, ${m.edges.length} links, ${how}${m.truncated ? ', only the newest files are shown' : ''}. Click a node to read it; drag to move; scroll to zoom.`;
 }
 
 // ---- the list -------------------------------------------------------------------------
@@ -288,7 +288,7 @@ async function showDetail(node) {
     const s = LAST_S && LAST_S.sessions ? LAST_S.sessions.get(node.chatId) : null;
     const prompt = s && s.lastPrompt ? String(s.lastPrompt) : '';
     const reply = s && s.lastReply ? String(s.lastReply) : '';
-    panel.innerHTML = `<div class="bd-head"><div><span class="bd-kind">chat · ${esc(node.status)} · ${esc(dayish(node.lastAt))}</span><h2>${esc(node.title)}</h2><span class="quiet">${esc(node.project)}</span></div>${close}</div>
+    panel.innerHTML = `<div class="bd-head"><div><span class="bd-kind">chat, ${esc(node.status)}, ${esc(dayish(node.lastAt))}</span><h2>${esc(node.title)}</h2><span class="quiet">${esc(node.project)}</span></div>${close}</div>
       ${node.gist ? `<p class="bd-gist">${esc(node.gist)}${(node.keywords || []).length ? `<span class="kw">${node.keywords.map((k) => `<i>${esc(k)}</i>`).join('')}</span>` : ''}</p>` : ''}
       ${prompt ? `<div class="bd-sec"><span class="bd-label">you asked</span><p>${esc(prompt.length > 600 ? `${prompt.slice(0, 600)}…` : prompt)}</p></div>` : ''}
       ${reply ? `<div class="bd-sec"><span class="bd-label">last reply</span><p>${esc(reply.length > 1200 ? `${reply.slice(0, 1200)}…` : reply)}</p></div>` : ''}
@@ -296,7 +296,7 @@ async function showDetail(node) {
     return;
   }
   const canOpen = node.path && node.path.startsWith('/');
-  panel.innerHTML = `<div class="bd-head"><div><span class="bd-kind">${esc(KIND_LABEL[node.kind] || node.kind)} · ${esc(node.project)}</span><h2 title="${esc(node.title)}">${esc(shortTitle(node.title))}</h2><span class="quiet bd-path">${esc(shortPath(node.path))}</span></div>${close}</div>
+  panel.innerHTML = `<div class="bd-head"><div><span class="bd-kind">${esc(KIND_LABEL[node.kind] || node.kind)}, ${esc(node.project)}</span><h2 title="${esc(node.title)}">${esc(shortTitle(node.title))}</h2><span class="quiet bd-path">${esc(shortPath(node.path))}</span></div>${close}</div>
     <div class="bd-acts">${canOpen ? `<button type="button" class="btn sm soft" data-brain-open="${esc(node.path)}">open</button>` : ''}<button type="button" class="btn sm soft" data-brain-copy-node="1">copy</button><button type="button" class="btn sm soft" data-brain-brief-node="1">use in a brief</button></div>
     <pre class="bd-text" id="bd-text">${B.texts.has(node.path) ? textHtml(B.texts.get(node.path), esc) : 'loading…'}</pre>`;
   if (B.texts.has(node.path)) return;
@@ -436,7 +436,7 @@ export function renderBrain(view, S, api) {
     const connect = page.querySelector('#brain-connect');
     if (connect) {
       const connected = Boolean(S.info && S.info.brainConnected);
-      const label = connected ? 'connected · add again' : 'add to claude code';
+      const label = connected ? 'connected, add again' : 'add to claude code';
       if (connect.textContent !== label) { connect.textContent = label; connect.className = `btn ${connected ? 'soft' : 'solid'}`; }
     }
     // The index was rebuilt: refresh the list (and the search, if there is one).
@@ -469,7 +469,7 @@ export function renderBrain(view, S, api) {
       <aside class="aside-box brain-connect" aria-label="Use it inside Claude Code">
         <h2>Use it inside Claude Code</h2>
         <p>Add Kroog's brain to Claude Code as a connector (an MCP server called kroog-brain). Then every chat, in VS Code too, can search it on its own when it needs a convention, a decision or a how-to from another project.</p>
-        <button type="button" class="btn ${connected ? 'soft' : 'solid'}" id="brain-connect">${connected ? 'connected · add again' : 'add to claude code'}</button>
+        <button type="button" class="btn ${connected ? 'soft' : 'solid'}" id="brain-connect">${connected ? 'connected, add again' : 'add to claude code'}</button>
         <p class="quiet">It runs on this Mac, reads only Kroog's index, and works even when the Kroog tab is closed. New chats pick it up.</p>
         <h2 style="margin-top:18px">What is in it</h2>
         <p class="quiet">Your CLAUDE.md files and rules, skills, agents, commands, plans, Claude Code's own memory for each project, each project's .claude docs, your Kroog notes, and your recent chats. Only text files; never settings, keys or chat transcripts. It stays on this Mac.</p>
