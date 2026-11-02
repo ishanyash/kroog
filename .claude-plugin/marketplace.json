@@ -7,7 +7,7 @@
     {
       "name": "kroog",
       "source": "./mod",
-      "description": "Sends your plan usage and each chat's cost to the Kroog on this Mac."
+      "description": "Sends your plan usage and each chat's cost to the Kroog on this computer, at 127.0.0.1."
     }
   ],
   "description": "Kroog, the map of your Claude Code chats, and its mod."

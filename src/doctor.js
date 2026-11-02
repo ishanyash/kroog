@@ -70,8 +70,8 @@ export async function doctor({ version = '' } = {}) {
   // 3. Claude Code versions: the CLI Kroog uses, and the extension in each editor.
   const cli = findClaude(settings.claudePath || '');
   const cliVersion = cli ? await claudeVersion(cli.path) : null;
-  if (cliVersion) ok(`Claude Code ${cliVersion} found for running chats`, cli.path);
-  else bad('Claude Code was not found, so Kroog can\'t start chats or use Haiku', 'Install it (code.claude.com) or set its path in Setup');
+  if (cliVersion) ok(`Claude Code ${cliVersion} found (the AI helper uses it)`, cli.path);
+  else bad('Claude Code was not found, so the AI helper cannot use Haiku on your plan', 'Install it (code.claude.com) or set its path in Setup');
   const exts = editorExtensions();
   // Terminal chats work without an editor; the extension is only needed to open chats from Kroog.
   if (!exts.length) ok('No Claude Code extension in VS Code or Cursor', 'Fine for terminal chats. To open chats from Kroog, install the Claude Code extension in your editor.');
@@ -142,9 +142,12 @@ export function boundaryText(r) {
     '',
     'What Kroog touches on this computer:',
     `  reads    ${c}/projects (transcripts, memory), ${c}/sessions, ${c}/settings.json,`,
-    `           ${c}/CLAUDE.md, rules, skills, agents, commands, plans; each project's CLAUDE.md and .claude docs; ${h}`,
-    `  writes   ${h}; hook entries and the mod in Claude Code's settings (backed up first); the clipboard when you ask`,
-    '  network  listens on 127.0.0.1 only; out to api.anthropic.com only with your own key, Ollama at 127.0.0.1, and claude -p for the helper',
+    `           ${c}/CLAUDE.md, AGENTS.md, rules, skills, agents, commands, plans, output-styles (text files only);`,
+    `           each project's CLAUDE.md, AGENTS.md and .claude docs; the editors' Claude Code extension folders; ${h}`,
+    `  writes   ${h}; hooks in Claude Code's settings (backed up first); the mod, and the kroog-brain tool if you add it;`,
+    '           the clipboard when you ask. unlink removes the hooks, the mod and the tool.',
+    '  network  listens on 127.0.0.1 only, and every request needs its token; out to api.anthropic.com only with your own key,',
+    '           claude -p for the helper, Ollama at 127.0.0.1, and GitHub only when the mod installs outside a git clone',
     `  never    ${c}/.credentials.json, the Keychain, any .env but its own, your source files, other apps, telemetry`,
   ].join('\n');
 }

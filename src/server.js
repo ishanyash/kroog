@@ -56,11 +56,26 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
+const LOCKED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kroog</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"></head><body><main class="locked"><h1>Kroog</h1><p>This browser does not have Kroog's key yet. Open Kroog from the Terminal, and it opens here with the key:</p><pre><code>node bin/kroog.js open</code></pre><p class="quiet">The key keeps other programs and other accounts on this computer out of your chats.</p></main></body></html>`;
+
 export function createServer({ port, token, engine, store, mode, getSettings, updateSettings, info, actions, groups = null, usage = null, burn = null }) {
   const clients = new Set();
   engine.hasViewers = () => clients.size > 0;
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const allowedOrigins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
+  // The page's key. 127.0.0.1 is reachable by every program and every account on this
+  // computer, so the API asks for Kroog's token: the browser gets it once from the link
+  // `start` (or `open`) opens, keeps it as a cookie only it can send, and scripts can pass
+  // it as X-Kroog-Token. The token lives in ~/.kroog/token, readable by you only.
+  const COOKIE = `kroog_${port}`;
+  function cookieOf(req) {
+    for (const part of String(req.headers.cookie || '').split(';')) {
+      const i = part.indexOf('=');
+      if (i > 0 && part.slice(0, i).trim() === COOKIE) return decodeURIComponent(part.slice(i + 1).trim());
+    }
+    return '';
+  }
+  const unlocked = (req) => safeEqual(cookieOf(req), token) || safeEqual(req.headers['x-kroog-token'] || '', token);
 
   function broadcast(event, data) {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -155,6 +170,9 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
 
   async function handleApi(req, res, url) {
     const route = url.pathname.slice('/api/'.length);
+    // Which program holds this port, for `stop` and `open`: a name and a version, nothing else.
+    if (req.method === 'GET' && route === 'who') return sendJson(res, 200, { ok: true, name: 'Kroog', version: (info() || {}).version || '', mode });
+    if (!unlocked(req)) return sendJson(res, 401, { ok: false, code: 'LOCKED', error: 'This tab has no key. Open Kroog again from the Terminal: node bin/kroog.js open' });
 
     if (req.method === 'GET' && route === 'state') return sendJson(res, 200, snapshot());
     // Plan usage: the windows now, their history, and where the week's spend went.
@@ -207,10 +225,6 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
           return sendJson(res, 200, engine.decide(sid, { behavior: data.behavior === 'allow' ? 'allow' : 'deny', message: data.message }));
         case 'release':
           return sendJson(res, 200, engine.release(sid));
-        case 'send':
-          return sendJson(res, 200, await engine.send(sid, data.text, { mode: ['branch', 'editor'].includes(data.mode) ? data.mode : 'auto' }));
-        case 'drive':
-          return sendJson(res, 200, engine.setDrive(sid, data.on));
         case 'stop':
           return sendJson(res, 200, engine.stop(sid));
         case 'archive':
@@ -282,6 +296,19 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
 
   function serveStatic(req, res, url) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, {});
+    // The link from the Terminal: keep the key as a cookie, then drop it from the address.
+    const key = url.searchParams.get('k');
+    if (key !== null) {
+      const headers = { Location: '/', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
+      if (safeEqual(key, token)) headers['Set-Cookie'] = `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000`;
+      res.writeHead(302, headers);
+      return res.end();
+    }
+    // Without the key, the page says how to get it instead of loading the app.
+    if ((url.pathname === '/' || url.pathname === '/index.html') && !unlocked(req)) {
+      res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PAGE_POLICY, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' });
+      return res.end(LOCKED_PAGE);
+    }
     const rel = url.pathname === '/' ? '/index.html' : url.pathname;
     const file = path.normalize(path.join(PUBLIC_DIR, rel));
     if (!file.startsWith(PUBLIC_DIR + path.sep)) {

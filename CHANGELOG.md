@@ -10,6 +10,11 @@ Dates are 2026.
 - Try it without installing: `npx github:ishanyash/kroog demo`. Outside a git clone, `link` installs the mod from GitHub. The mod honours `KROOG_HOME`. The install line for the mod is the Terminal one. On Windows, `link` says to use WSL.
 - Burn keeps fractions of a cent, so a short Haiku chat no longer reads as 0. Haiku 5.5 prices checked against Claude Code's own figure.
 - "This computer" instead of "this Mac". The demo's projects and text are generic, in dollars.
+- The page and its API need Kroog's key. Before, any program or other account on the computer could read chats through 127.0.0.1, send context into them, or answer a held permission question. Now the browser gets the key once from the link `start` (or the new `open` command) opens, as an HttpOnly cookie; scripts can send it as `X-Kroog-Token`. Without it the page says how to open Kroog.
+- Kroog never runs a chat, now in the code too: the leftover paths that could resume or branch a chat with `claude -p` are gone, with the unused API routes behind them.
+- The demo keeps its data in a temporary folder, and its brain page shows a small sample brain instead of your own `~/.claude`. Its Setup buttons change nothing in Claude Code.
+- `unlink` also removes the `kroog-brain` tool. The AI helper's daily cap survives a restart.
+- `SECURITY.md` is complete: what the brain reads, the inbox tokens, the brain tool, GitHub for the mod, the Ollama check, and the permission hold (Kroog holds a permission question for up to 30 seconds so you can answer it in Kroog; it approves nothing on its own).
 - GitHub Actions runs the tests on macOS and Linux, Node 20 and 22.
 - Tested end to end on Linux with real Claude Code 2.1.316: the hooks and the map, the mod installed from GitHub and from a clone with its readings arriving, the context sent into an open chat and into a brand-new chat (each replied in a few lines with no tool calls), and the burn report from real transcripts.
 

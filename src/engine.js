@@ -672,15 +672,8 @@ export class Engine {
       return { ok: true, delivered: 'queued' };
     }
 
-    // Not running anywhere. Kroog carries the same chat on here, one turn at a time; the
-    // editor can open it again afterwards. (With the registry we know it is not open; without
-    // it, only chats Kroog ran or saw close are safe to continue.)
-    const canRun = runner && runner.available();
-    if (canRun && mode === 'branch') return runner.run({ mode: 'fork', from: sid, prompt: body, label: stepText });
-    const surelyClosed = this.presence.available ? !this.presence.isOpen(sid) : (s.owner === 'kroog' || s.status === 'ended');
-    if (canRun && mode !== 'editor' && surelyClosed) {
-      return runner.run({ mode: 'resume', id: sid, prompt: body, label: stepText });
-    }
+    // Not running anywhere. Kroog never runs a chat itself: the chat has to be opened in
+    // the editor (or the terminal) first.
     if (s.status === 'ended') return { ok: false, error: 'This chat is closed. Open it in the editor first.' };
 
     // It's waiting for you and Kroog isn't holding it, so hand over to the editor.

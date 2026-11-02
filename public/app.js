@@ -37,7 +37,7 @@ const background = () => {
   if (b) return b;
   return store.get('kroog-water', '') === 'off' ? 'none' : 'pixels';
 };
-// Kroog can run chats itself when it found Claude Code on this computer.
+// Whether Claude Code was found on this computer (the AI helper uses it).
 const canRun = () => Boolean(S.info.claude && S.info.claude.found);
 const aiOn = () => Boolean(S.info.ai && S.info.ai.provider && S.info.ai.provider !== 'off');
 const kroogRunning = (s) => Boolean(s.kroogRunning);
@@ -66,8 +66,17 @@ async function post(path, body = {}) {
   });
   let data = {};
   try { data = await res.json(); } catch { data = {}; }
+  if (res.status === 401) locked();
   if (!res.ok || data.ok === false) throw new Error(data.error || `Kroog could not do that (${res.status}).`);
   return data;
+}
+
+// This tab has no key (Kroog was restarted with a new one, or the page was opened by hand).
+let lockedShown = false;
+function locked() {
+  if (lockedShown) return;
+  lockedShown = true;
+  toast('This tab has no key for Kroog. Open it again from the Terminal: node bin/kroog.js open', 600000);
 }
 
 let toastTimer = null;
@@ -153,7 +162,11 @@ function connect() {
   es.addEventListener('settings', (e) => { S.settings = JSON.parse(e.data); scheduleRender(); });
   es.addEventListener('info', (e) => { S.info = JSON.parse(e.data); scheduleRender(); });
   es.onopen = () => { S.connected = true; renderTop(); };
-  es.onerror = () => { S.connected = false; renderTop(); };
+  es.onerror = () => {
+    S.connected = false;
+    renderTop();
+    fetch('/api/state', { headers: { 'X-Kroog-UI': '1' } }).then((r) => { if (r.status === 401) { locked(); es.close(); } }).catch(() => {});
+  };
 }
 
 function alertIfNeeded(before, s) {

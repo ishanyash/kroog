@@ -68,6 +68,14 @@ export async function uninstallMod({ claudePath = '' } = {}) {
   return r.ok ? { ok: true } : { ok: false, error: (r.stderr || r.error).trim().slice(0, 200) };
 }
 
+// The kroog-brain tool (added from the brain page) is a user-scope MCP server in Claude Code.
+export async function removeBrainTool({ claudePath = '' } = {}) {
+  const cli = findClaude(claudePath);
+  if (!cli) return { ok: false };
+  const r = await run(cli.path, ['mcp', 'remove', '--scope', 'user', 'kroog-brain']);
+  return { ok: true, removed: r.ok };
+}
+
 // The line to run in the Terminal when the install above cannot run.
 export function installLine({ remote = REMOTE } = {}) {
   return `claude plugin install ${MOD_NAME} --marketplace ${remote}`;

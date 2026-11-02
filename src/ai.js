@@ -60,8 +60,6 @@ export class AiHelper {
     this.busy = 0;
     this.pending = new Set();
     this.lastError = null;
-    this.day = '';
-    this.used = 0;
     if (engine) engine.ai = this;
   }
 
@@ -79,18 +77,26 @@ export class AiHelper {
   }
 
   status() {
-    return { provider: this.provider(), want: this.getSettings().aiProvider || 'auto', usedToday: this.used, limit: this.limit(), error: this.lastError, waiting: this.queue.length + this.busy };
+    return { provider: this.provider(), want: this.getSettings().aiProvider || 'auto', usedToday: this.today().used, limit: this.limit(), error: this.lastError, waiting: this.queue.length + this.busy };
   }
 
   limit() {
     return Math.max(10, Math.min(Number(this.getSettings().aiDailyLimit) || 200, 2000));
   }
 
-  count() {
+  // Today's count, kept with Kroog's saved state so a restart does not reset the cap.
+  today() {
     const day = new Date().toDateString();
-    if (day !== this.day) { this.day = day; this.used = 0; }
-    if (this.used >= this.limit()) throw new Error(`Kroog used its ${this.limit()} AI calls for today. Change the limit in setup.`);
-    this.used += 1;
+    const u = this.store.data.aiUsage && typeof this.store.data.aiUsage === 'object' ? this.store.data.aiUsage : (this.store.data.aiUsage = { day, used: 0 });
+    if (u.day !== day) { u.day = day; u.used = 0; }
+    return u;
+  }
+
+  count() {
+    const u = this.today();
+    if (u.used >= this.limit()) throw new Error(`Kroog used its ${this.limit()} AI calls for today. Change the limit in setup.`);
+    u.used += 1;
+    if (this.store.scheduleSave) this.store.scheduleSave();
   }
 
   async complete({ system, prompt, maxTokens = 700 }) {

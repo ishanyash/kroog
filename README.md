@@ -4,7 +4,7 @@
 
 Kroog is one browser tab, on your own computer, that shows every Claude Code chat you have in VS Code, Cursor or the terminal: what each one is about, what it got done, which ones are waiting on you, and how they came from each other. Pick two or three chats and Kroog starts a new chat whose first message is what they worked out. It also shows how fast you are using your plan's limits, and where the usage went.
 
-Chats stay in Claude Code. Kroog never runs a chat, never edits your code, and never sends your data anywhere.
+Chats stay in Claude Code. Kroog never runs a chat and never edits your code. The only thing that leaves your computer is what its AI helper summarises, sent through your own Claude Code like any chat; with a local model, or the helper off, nothing does.
 
 ![A tour of Kroog: the week view, a chat's profile, a new chat from a suggested group, and the burn page](docs/images/kroog-tour.gif)
 
@@ -16,7 +16,7 @@ With Node 20 or newer:
 npx github:ishanyash/kroog demo
 ```
 
-A tab opens with a week of made-up chats. Nothing on your computer or in Claude Code is touched. Press Ctrl+C to stop it.
+A tab opens with a week of made-up chats. The demo keeps its data in a temporary folder and changes nothing in Claude Code. Press Ctrl+C to stop it.
 
 ## Install
 
@@ -24,19 +24,19 @@ You need:
 
 | | Version | Check |
 | --- | --- | --- |
-| macOS or Linux | Windows: use WSL | |
+| macOS or Linux | Windows: use WSL. Linux also needs `curl`, `lsof`, and `wl-copy` or `xclip` | |
 | Node.js | 20 or newer | `node -v` |
-| Claude Code | 2.1.224 or newer; 2.1.299 or newer for the burn page | `claude --version`, or `/status` in a chat |
+| Claude Code | 2.1.224 or newer; 2.1.299 or newer for the plan's usage windows | `claude --version`, or `/status` in a chat |
 | VS Code or Cursor | any recent version, for opening chats from Kroog | optional |
 
 ```
 git clone https://github.com/ishanyash/kroog.git ~/kroog
 cd ~/kroog
 node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/settings.json first)
-node bin/kroog.js start     # run it; opens http://127.0.0.1:4877
+node bin/kroog.js start     # run it; opens its page with its key
 ```
 
-Keep the window with `start` open while you use Kroog. On its first start Kroog brings in your chats from the last 7 days, so the map is not empty. Chats that were already open start reporting after `/reload-plugins`, or in a new chat.
+Keep the window with `start` open while you use Kroog. If you close the tab, `node bin/kroog.js open` brings it back. Each time it starts, Kroog brings in chats from the last 7 days of Claude Code's history (up to 40), so the map is not empty. Chats that were already open start reporting after `/reload-plugins`, or in a new chat.
 
 To update: `cd ~/kroog && git pull`, then `node bin/kroog.js stop` and `start`. To remove: `node bin/kroog.js unlink`, then delete `~/kroog` and `~/.kroog`.
 
@@ -77,7 +77,7 @@ The chip at the top of every page shows your plan's two windows, the 5-hour one 
 
 The dollars are what the tokens would cost on the API at list price, the same figure Claude Code itself reports. On a Pro or Max plan you pay the plan's price, not this; the windows are what limit you. Most of the tokens are cache reads, because every request re-reads the conversation so far: long chats cost more per message.
 
-The numbers come from Claude Code: each chat's own cost record in its transcript, and Kroog's **mod**, a small Claude Code plugin in this repository (`mod/`) that sends the plan's windows to Kroog at 127.0.0.1 after each turn. `link` installs it. To install it by hand:
+The numbers come from Claude Code: each chat's own cost record in its transcript, and Kroog's **mod**, a small Claude Code plugin in this repository (`mod/`) that sends the plan's windows, with the chat's id, folder, cost and context size, to Kroog at 127.0.0.1 after each turn. `link` installs it. To install it by hand:
 
 ```
 claude plugin install kroog --marketplace ishanyash/kroog
@@ -86,6 +86,8 @@ claude plugin install kroog --marketplace ishanyash/kroog
 or, inside a chat, `/plugin marketplace add ishanyash/kroog` and then `/plugin install kroog@kroog`. Windows appear only on a claude.ai plan.
 
 ### Remember: a second brain
+
+![The brain: instructions, skills and each project's memory as a map, with recent chats linked to the files they share words with](docs/images/brain.png)
 
 The **brain** page is a map and a search over what Claude Code already knows about your work: your `CLAUDE.md` files, rules, skills, agents, commands and plans, Claude Code's own memory for each project, and your Kroog notes. It never indexes settings, keys or transcripts. With [Ollama](https://ollama.com) and `embeddinggemma` it searches by meaning; without, by keyword. **add to claude code** gives every new chat a `kroog-brain` tool to look things up itself.
 
@@ -96,23 +98,25 @@ The short lines (summaries, "done so far", group names, merged briefs) are writt
 ## Privacy and safety
 
 - Kroog listens on `127.0.0.1` only. Other computers cannot reach it, and other websites cannot call it or show it in a frame.
-- Hooks and the mod must carry Kroog's secret token (`~/.kroog/token`, readable by you only).
+- The page, the hooks and the mod all need Kroog's secret token (`~/.kroog/token`, readable by you only). Your browser gets it once, from the link `start` or `open` opens, and keeps it as a cookie; other programs and other accounts on your computer cannot use Kroog without it.
 - Kroog never reads Claude Code's credentials or your Keychain, never edits your code, and never runs a chat. A message from Kroog arrives as a message from another session, which Claude Code never treats as your approval.
+- Kroog approves nothing on its own. When a chat asks for a permission while a Kroog tab is open, Kroog holds the question for up to 30 seconds so you can answer it there; then your editor asks as usual. **Setup**, "answer here first", turns this off.
 - No telemetry, no analytics, no update checks. The AI helper's input goes to Anthropic through Claude Code like any chat, or stays on your computer with Ollama.
 
-[SECURITY.md](SECURITY.md) lists exactly what Kroog reads, writes and connects to. `test/boundary.test.js` fails the build if the code steps outside that list, and `node bin/kroog.js doctor` prints it with your own paths.
+[SECURITY.md](SECURITY.md) lists what Kroog reads, writes and connects to, and `node bin/kroog.js doctor` prints that list with your own paths. `test/boundary.test.js` checks the source for the main lines of it: the hosts the code names, where it listens, and no credential paths. It is a check on the code's text, not a sandbox.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `node bin/kroog.js demo` | Made-up chats. Changes nothing. |
+| `node bin/kroog.js demo` | Made-up chats, in a temporary folder. Changes nothing in Claude Code. |
 | `node bin/kroog.js link` | Connect Claude Code to Kroog and install the mod (`--no-mod` to skip it). Safe to run again. |
-| `node bin/kroog.js start` | Run Kroog. Brings in the last 7 days of chats on the first run (`--no-import` to skip). |
+| `node bin/kroog.js start` | Run Kroog and open its page. Brings in the last 7 days of chats each time (`--no-import` to skip). |
+| `node bin/kroog.js open` | Open the page of the Kroog that is running, with its key. |
 | `node bin/kroog.js stop` | Stop the Kroog that is running. |
 | `node bin/kroog.js doctor` | Check everything and print what Kroog touches. |
 | `node bin/kroog.js status` | What is linked, and where Kroog keeps its files. |
-| `node bin/kroog.js unlink` | Remove the hooks and the mod. Your data in `~/.kroog` stays. |
+| `node bin/kroog.js unlink` | Remove the hooks, the mod and the brain tool. Your data in `~/.kroog` stays. |
 
 Add `--port 4878` to `link` and `start` to use another port.
 
@@ -143,13 +147,13 @@ Add `--port 4878` to `link` and `start` to use another port.
 
 ## Questions
 
-**Is this made by Anthropic?** No. It is an independent open-source tool built on Claude Code's public features.
+**Is this made by Anthropic?** No. It is an independent open-source tool built on Claude Code's features: hooks and plugins, which are documented, and its registry of open chats, chat inboxes and transcripts, which are partly internal.
 
 **Does it cost anything?** Kroog is free. The AI helper's calls count toward your plan like a short chat, with a daily cap; turn it off in Setup if you like.
 
 **Why not just ask Claude Code to summarise old chats?** You can, one chat at a time. Kroog keeps short summaries current for all of them, across editors and the terminal, and turns several chats into the start of the next one with one button.
 
-**Can Kroog approve things in my chats?** No. Messages from Kroog arrive as messages from another session, and Claude Code never treats those as your approval.
+**Can Kroog approve things in my chats?** Only when you press allow in Kroog, for a question it is holding while its tab is open. Messages Kroog sends arrive as messages from another session, and Claude Code never treats those as your approval.
 
 ## Contributing
 

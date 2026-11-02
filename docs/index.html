@@ -189,7 +189,7 @@ footer a { color: var(--ink-2); }
       <h2>Install</h2>
       <div class="two">
         <div>
-          <p class="small">Try it first, with made-up chats. Nothing is changed.</p>
+          <p class="small">Try it first, with made-up chats. It keeps its data in a temporary folder and changes nothing in Claude Code.</p>
           <div class="cmds"><pre id="cmd-demo">npx github:ishanyash/kroog demo</pre><button type="button" data-copy="cmd-demo">copy</button></div>
           <p class="small">Then install it for real. <code>link</code> backs up <code>~/.claude/settings.json</code> before it adds its hooks.</p>
           <div class="cmds"><pre id="cmd-install">git clone https://github.com/ishanyash/kroog.git ~/kroog
@@ -203,7 +203,7 @@ node bin/kroog.js start</pre><button type="button" data-copy="cmd-install">copy<
             <tbody>
               <tr><td>macOS or Linux</td><td>Windows: use WSL</td></tr>
               <tr><td>Node.js</td><td>20 or newer</td></tr>
-              <tr><td>Claude Code</td><td>2.1.224 or newer; 2.1.299 or newer for plan usage</td></tr>
+              <tr><td>Claude Code</td><td>2.1.224 or newer; 2.1.299 or newer for the plan's usage windows</td></tr>
               <tr><td>VS Code or Cursor</td><td>to open chats from Kroog (optional)</td></tr>
               <tr><td>A Claude plan</td><td>Pro or Max, for the usage windows (optional)</td></tr>
             </tbody>
@@ -216,15 +216,15 @@ node bin/kroog.js start</pre><button type="button" data-copy="cmd-install">copy<
     <section class="block" id="privacy">
       <h2>Yours, and only on your computer</h2>
       <div class="grid3">
-        <div><h3>Local only</h3><p>Kroog listens on 127.0.0.1. Other computers cannot reach it, and other websites cannot call it. No accounts, no telemetry, no analytics.</p></div>
-        <div><h3>Never in charge</h3><p>Kroog never runs a chat and never edits your code. Its messages arrive as messages from another session, which Claude Code never takes as your approval.</p></div>
-        <div><h3>Checked, not promised</h3><p>The repository lists exactly what Kroog reads, writes and connects to, and a test fails the build if the code steps outside it. It never reads your credentials.</p></div>
+        <div><h3>Local only</h3><p>Kroog listens on 127.0.0.1, and every request needs its secret key. Other computers, other websites and other accounts on your computer cannot use it. No accounts, no telemetry, no analytics.</p></div>
+        <div><h3>Never in charge</h3><p>Kroog never runs a chat, never edits your code, and approves nothing on its own. Its messages arrive as messages from another session, which Claude Code never takes as your approval.</p></div>
+        <div><h3>Written down, and checked</h3><p>The repository lists what Kroog reads, writes and connects to, tests check the main lines of that list on every change, and <code>doctor</code> prints it with your own paths. It never reads your credentials.</p></div>
       </div>
     </section>
 
     <section class="block" id="questions">
       <h2>Questions</h2>
-      <details><summary>Is Kroog made by Anthropic?</summary><p>No. It is an independent open-source tool built on Claude Code's public features: hooks, its registry of open chats, chat inboxes and the plugin API.</p></details>
+      <details><summary>Is Kroog made by Anthropic?</summary><p>No. It is an independent open-source tool built on Claude Code's features: hooks and plugins, which are documented, and its registry of open chats, chat inboxes and transcripts, which are partly internal.</p></details>
       <details><summary>What does it cost?</summary><p>Kroog is free. The short summaries are written by a small model, by default Claude Code with Haiku on your plan, with a daily cap. You can use a local model with Ollama, your own API key, or turn it off.</p></details>
       <details><summary>Why are the dollars on the burn page so high?</summary><p>They are what the tokens would cost on the API at list price, the same figure Claude Code reports. On a Pro or Max plan you pay the plan's price, not this. Most tokens are cache reads, because every request re-reads the conversation so far.</p></details>
       <details><summary>Does it work with Cursor or the terminal?</summary><p>Chats from VS Code, Cursor and the terminal all show up. Opening a chat or starting a new one from Kroog is built and tested for VS Code.</p></details>

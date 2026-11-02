@@ -767,3 +767,9 @@ details.more[open] > summary::before { transform: rotate(45deg); }
 details.more > summary:hover { color: var(--ink); }
 details.more > summary .quiet { font-size: var(--small); }
 details.more > .readout { border-top: 0; padding-top: 8px; }
+
+/* The page a browser gets without Kroog's key. */
+.locked { max-width: 40rem; margin: 15vh auto 0; padding: 0 var(--s-4); }
+.locked h1 { font-size: var(--h1); font-weight: 500; margin: 0 0 var(--s-4); }
+.locked p { color: var(--ink-2); margin: 0 0 var(--s-4); }
+.locked pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: var(--s-3) var(--s-4); margin: 0 0 var(--s-4); }

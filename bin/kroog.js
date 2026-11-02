@@ -32,7 +32,7 @@ import { EditorOpener } from '../src/editor.js';
 import { Usage } from '../src/usage.js';
 import { CostBook, PRICES_AS_OF } from '../src/cost.js';
 import { burnReport } from '../src/burn.js';
-import { modStatus, installMod, uninstallMod, installLine, isClone } from '../src/mod.js';
+import { modStatus, installMod, uninstallMod, removeBrainTool, installLine, isClone } from '../src/mod.js';
 import { AiHelper } from '../src/ai.js';
 
 const VERSION = '1.5.0';
@@ -57,7 +57,7 @@ function openBrowser(url) {
 function checkNode() {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < 20) {
-    console.error(`Kroog needs Node 20 or newer. You have ${process.versions.node}. Install it from https://nodejs.org or with: brew install node`);
+    console.error(`Kroog needs Node 20 or newer. You have ${process.versions.node}. Install it from https://nodejs.org or with your package manager`);
     process.exit(1);
   }
 }
@@ -111,7 +111,8 @@ async function start({ demo }) {
   // The second brain: your ~/.claude files, project .claude docs and Kroog notes, searchable.
   const brain = new SecondBrain({
     dir: nodePath.join(p.home, 'brain'),
-    claudeDir: claudeDir(),
+    // The demo indexes a small sample brain shipped with Kroog, not your own ~/.claude.
+    claudeDir: demo ? fileURLToPath(new URL('../src/demo-brain', import.meta.url)) : claudeDir(),
     getSettings: () => settings,
     getProjects: () => [...new Set(Object.values(store.data.sessions).map((x) => x.cwd).filter(Boolean))],
     getNotes: () => store.data.notes,
@@ -211,14 +212,6 @@ async function start({ demo }) {
       if (!r.added) return { message: `Nothing new. The ${r.found} chat${r.found === 1 ? '' : 's'} from the last ${d} days ${r.found === 1 ? 'is' : 'are'} already here.` };
       return { message: `Imported ${r.added} chat${r.added === 1 ? '' : 's'} from the last ${d} days.` };
     },
-    run: async ({ cwd, prompt, permissionMode } = {}) => {
-      await detecting;
-      const folder = String(cwd || '');
-      if (!folder) throw new Error('Pick a project folder.');
-      const r = runner.run({ mode: 'new', cwd: folder, prompt, permissionMode: permissionMode === 'acceptEdits' ? 'acceptEdits' : undefined });
-      if (!r.ok) throw new Error(r.error);
-      return { id: r.id, message: 'Started. It runs here in Kroog.' };
-    },
     // Open a chat, or a new chat with text typed in, in the editor: from Kroog itself, so the
     // browser never has to ask about opening vscode:// links. With a folder, that window opens first.
     // Opens a chat in the editor, on its project folder; or a new chat there, with a first
@@ -296,6 +289,7 @@ async function start({ demo }) {
       return { message: 'Updating the brain. It takes a few seconds, longer the first time.' };
     },
     'brain-connect': async () => {
+      if (demo) return { message: 'In the demo nothing is added to Claude Code. With your own chats this adds the kroog-brain tool.' };
       await detecting;
       if (!runner.available()) throw new Error('Kroog could not find Claude Code on this computer. See setup.');
       const bin = runner.cli.path;
@@ -329,6 +323,7 @@ async function start({ demo }) {
         else if (l && looksLikeOurs(l.command)) console.error(`An older Crew or Kroog holds port ${port} but is not answering (process ${l.pid}: ${l.command}).`);
         else if (l) console.error(`Port ${port} is used by another program (process ${l.pid}: ${l.command}).`);
         else console.error(`Port ${port} is busy, and Kroog could not see by what.`);
+        console.error('To open the one that is running: node bin/kroog.js open');
         console.error(`To stop it and start this version: node bin/kroog.js stop && node bin/kroog.js start`);
         console.error('Or run on another port with --port 4878 (then run link again with the same --port).');
         process.exit(1);
@@ -341,11 +336,14 @@ async function start({ demo }) {
 
   server.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}`;
+    // The page's key rides on this link once; the browser keeps it as a cookie.
+    const keyed = `${url}/?k=${encodeURIComponent(token)}`;
     console.log('');
     console.log(demo ? `Kroog demo is running at ${url}` : `Kroog is running at ${url}`);
-    console.log('Keep this window open. Press Ctrl+C to stop.');
+    console.log(`Open it with its key: ${keyed}`);
+    console.log(demo ? 'Keep this window open. Press Ctrl+C to stop.' : 'Keep this window open. Press Ctrl+C to stop. To open the page again later: node bin/kroog.js open');
     if (demo) {
-      console.log('These are fake chats. Nothing on your computer or in Claude Code is touched.');
+      console.log(`These are made-up chats, kept in a temporary folder (${p.home}). Nothing in Claude Code or your ~/.kroog is touched.`);
     } else {
       const status = linkStatus();
       if (!status.linked) console.log('Not linked to Claude Code yet. Run: node bin/kroog.js link (or use the Setup page).');
@@ -365,11 +363,11 @@ async function start({ demo }) {
     console.log('');
     if (!demo) {
       detecting.then((st) => {
-        if (st && st.found) console.log(`Claude Code ${st.version} found${st.from === 'vscode' || st.from === 'cursor' ? ` (the copy inside ${st.from === 'cursor' ? 'Cursor' : 'VS Code'})` : ''}. Kroog can run chats and use Haiku on your plan.`);
-        else console.log('Claude Code was not found, so Kroog cannot run chats itself. Set its path in setup.');
+        if (st && st.found) console.log(`Claude Code ${st.version} found${st.from === 'vscode' || st.from === 'cursor' ? ` (the copy inside ${st.from === 'cursor' ? 'Cursor' : 'VS Code'})` : ''}. The AI helper can use Haiku on your plan.`);
+        else console.log('Claude Code was not found, so the AI helper cannot use Haiku on your plan. Set its path in setup, or pick another helper.');
       });
     }
-    if (!flag('no-open')) openBrowser(url);
+    if (!flag('no-open')) openBrowser(keyed);
   });
 
   const stopDemo = demo ? startDemo({ engine, store }) : null;
@@ -443,14 +441,18 @@ function startDemoUsage(usage, store) {
 }
 
 async function whoIsOn(port) {
-  let info = null;
-  try {
-    const r = await fetch(`http://127.0.0.1:${port}/api/state`, { signal: AbortSignal.timeout(1500) });
-    if (r.ok) info = (await r.json()).info || null;
-  } catch { /* not Kroog, or not answering */ }
-  if (!info || !info.version) return null;
-  const name = String((info.paths && info.paths.home) || '').includes('.crew') ? 'Crew' : 'Kroog';
-  return { name, version: info.version, pid: pidOnPort(port) };
+  // 1.5 and later answer /api/who without a key; older Kroog and Crew answered /api/state.
+  for (const p of ['/api/who', '/api/state']) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}${p}`, { signal: AbortSignal.timeout(1500) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (p === '/api/who' && j && j.version) return { name: 'Kroog', version: j.version, pid: pidOnPort(port) };
+      const info = j && j.info;
+      if (info && info.version) return { name: String((info.paths && info.paths.home) || '').includes('.crew') ? 'Crew' : 'Kroog', version: info.version, pid: pidOnPort(port) };
+    } catch { /* not Kroog, or not answering */ }
+  }
+  return null;
 }
 
 function pidOnPort(port) {
@@ -528,10 +530,11 @@ function status() {
 function help() {
   console.log(`Kroog ${VERSION}
 
-  node bin/kroog.js demo      Try it with fake chats. Changes nothing.
+  node bin/kroog.js demo      Try it with made-up chats, in a temporary folder.
   node bin/kroog.js link      Connect Claude Code to Kroog (backs up ~/.claude/settings.json first).
-  node bin/kroog.js start     Run Kroog for your real chats, then open http://127.0.0.1:${DEFAULT_SETTINGS.port}
-  node bin/kroog.js unlink    Remove Kroog's hooks from ~/.claude/settings.json.
+  node bin/kroog.js start     Run Kroog for your real chats, and open its page.
+  node bin/kroog.js open      Open the page of the Kroog that is running, with its key.
+  node bin/kroog.js unlink    Remove Kroog's hooks, mod and brain tool from Claude Code.
   node bin/kroog.js status    Show what's linked and where Kroog keeps its files.
   node bin/kroog.js stop      Stop the Kroog (or old Crew) that is running.
   node bin/kroog.js doctor    Check everything Kroog needs, and say what to fix.
@@ -546,8 +549,23 @@ try {
       await start({ demo: false });
       break;
     case 'demo':
+      // The demo keeps its data in a temporary folder, never in ~/.kroog.
+      if (!process.env.KROOG_HOME) process.env.KROOG_HOME = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kroog-demo-home-'));
       await start({ demo: true });
       break;
+    case 'open': {
+      const port = Number(option('port') || loadSettings().port || DEFAULT_SETTINGS.port);
+      const who = await whoIsOn(port);
+      if (!who) {
+        console.log(`Kroog is not running on port ${port}. Start it with: node bin/kroog.js start`);
+        process.exitCode = 1;
+        break;
+      }
+      const keyed = `http://127.0.0.1:${port}/?k=${encodeURIComponent(readToken())}`;
+      console.log(`Opening ${keyed}`);
+      openBrowser(keyed);
+      break;
+    }
     case 'link': {
       checkNode();
       if (process.platform === 'win32') {
@@ -571,6 +589,8 @@ try {
       console.log(r.changed ? `Unlinked. Kroog's hooks were removed from ${r.settingsPath}. Backup: ${r.backupPath}` : 'Kroog was not linked. Nothing changed.');
       const m = await uninstallMod({ claudePath: loadSettings().claudePath || '' });
       if (m.ok) console.log('The Kroog mod was removed from Claude Code.');
+      const b = await removeBrainTool({ claudePath: loadSettings().claudePath || '' });
+      if (b.ok && b.removed) console.log('The kroog-brain tool was removed from Claude Code.');
       break;
     }
     case 'status':

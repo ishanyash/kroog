@@ -47,37 +47,25 @@ test('finds Claude Code and starts a new chat that Kroog runs', async () => {
   assert.equal(fs.realpathSync(c.cwd), fs.realpathSync(dir));
 });
 
-test('a message to a chat Kroog runs continues the same chat; an editor chat is branched', async () => {
+test('a message never makes Kroog run a chat: no resume, no branch', async () => {
   const { dir, store, engine, runner, calls } = await setup();
   const r = runner.run({ mode: 'new', cwd: dir, prompt: 'first' });
   const s = store.session(r.id);
   await until(() => s.status === 'done');
+  const before = calls().length;
   const again = await engine.send(r.id, 'second');
-  assert.equal(again.delivered, 'kroog');
-  assert.equal(again.mode, 'resume');
-  await until(() => s.status === 'done' && s.lastReply.includes('second'));
-  assert.ok(calls()[1].args.includes('--resume'));
-  assert.equal(calls()[1].args[calls()[1].args.indexOf('--resume') + 1], r.id);
+  assert.notEqual(again.delivered, 'kroog', 'a finished chat is not carried on by Kroog');
 
   // An idle chat from the editor.
   await engine.handle('UserPromptSubmit', { session_id: 'ed1', cwd: dir, prompt: 'hello' }, { entry: 'claude-vscode' });
   await engine.handle('Stop', { session_id: 'ed1', cwd: dir, last_assistant_message: 'Hi there, all done with the setup work.' }, { entry: 'claude-vscode' });
   const plain = await engine.send('ed1', 'more please');
-  assert.equal(plain.delivered, 'editor', 'without a mode the editor link stays the default');
+  assert.equal(plain.delivered, 'editor', 'the editor opens it instead');
   assert.ok(plain.url.startsWith('vscode://'));
   const branch = await engine.send('ed1', 'more please', { mode: 'branch' });
-  assert.ok(branch.ok, branch.error);
-  assert.equal(branch.mode, 'fork');
-  const child = store.session(branch.id);
-  assert.notEqual(branch.id, 'ed1');
-  assert.deepEqual(child.inputs.find((x) => x.kind === 'continue').from, ['ed1']);
-  assert.match(child.title, /continued/);
-  await until(() => calls().length >= 3);
-  const c = calls().at(-1);
-  assert.ok(c.args.includes('--fork-session'));
-  assert.equal(c.args[c.args.indexOf('--resume') + 1], 'ed1');
-  assert.equal(c.args[c.args.indexOf('--session-id') + 1], branch.id);
-  await until(() => child.status === 'done');
+  assert.notEqual(branch.mode, 'fork', 'no branch is started');
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(calls().length, before, 'no claude process was started for a message');
   assert.equal(store.session('ed1').owner, undefined, 'the editor chat is left alone');
 });
 

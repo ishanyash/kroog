@@ -70,7 +70,7 @@ function statusLine(st) {
   if (!st) return 'Starting up.';
   const parts = [];
   parts.push(`${st.files || 0} files, ${st.chunks || 0} pieces`);
-  if (st.embedder && st.embedder !== 'none') parts.push(`searched by meaning with ${st.model || st.embedder} on this Mac, and by keyword`);
+  if (st.embedder && st.embedder !== 'none') parts.push(`searched by meaning with ${st.model || st.embedder} on this computer, and by keyword`);
   else parts.push('searched by keyword (for search by meaning, run Ollama with an embedding model)');
   return `${parts.join(', ')}.`;
 }
@@ -464,9 +464,9 @@ export function renderBrain(view, S, api) {
         <h2>Use it inside Claude Code</h2>
         <p>Add Kroog's brain to Claude Code as a connector (an MCP server called kroog-brain). Then every chat, in VS Code too, can search it on its own when it needs a convention, a decision or a how-to from another project.</p>
         <button type="button" class="btn ${connected ? 'soft' : 'solid'}" id="brain-connect">${connected ? 'connected, add again' : 'add to claude code'}</button>
-        <p class="quiet">It runs on this Mac, reads only Kroog's index, and works even when the Kroog tab is closed. New chats pick it up.</p>
+        <p class="quiet">It runs on this computer, reads only Kroog's index, and works even when the Kroog tab is closed. New chats pick it up.</p>
         <h2 style="margin-top:18px">What is in it</h2>
-        <p class="quiet">Your CLAUDE.md files and rules, skills, agents, commands, plans, Claude Code's own memory for each project, each project's .claude docs, your Kroog notes, and your recent chats. Only text files; never settings, keys or chat transcripts. It stays on this Mac.</p>
+        <p class="quiet">Your CLAUDE.md files and rules, skills, agents, commands, plans, Claude Code's own memory for each project, each project's .claude docs, your Kroog notes, and your recent chats. Only text files; never settings, keys or chat transcripts. It stays on this computer.</p>
       </aside>
     </div>
   </div>`;

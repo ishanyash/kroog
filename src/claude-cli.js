@@ -1,6 +1,6 @@
 // Finds and runs Claude Code's own command line on this computer, signed in with your usual
 // Claude Code login (your subscription). Kroog uses it two ways:
-//   - to run chats itself (new chats, continuing a chat, branching a chat), and
+//   - (in older versions, to run chats itself; Kroog no longer does), and
 //   - for small model calls (summaries, briefs, notes) with Haiku, hooks off and no tools.
 // The VS Code and Cursor extensions carry a private copy of the same program, so Kroog can
 // use that copy when `claude` is not installed in the Terminal.
