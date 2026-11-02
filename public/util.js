@@ -122,13 +122,11 @@ export function isEmptyChat(s) {
 }
 
 export function visibleSessions(S) {
-  const ideOnly = S.settings.ideOnly !== false;
-  return [...S.sessions.values()].filter((s) => !s.archived && !isEmptyChat(s) && (!ideOnly || s.kind === 'ide' || s.kind === 'kroog' || s.kind === 'unknown'));
+  return [...S.sessions.values()].filter((s) => !s.archived && !isEmptyChat(s) && shownKind(s.kind, S.settings));
 }
 
 export function hiddenByScope(S) {
-  if (S.settings.ideOnly === false) return 0;
-  return [...S.sessions.values()].filter((s) => !s.archived && !(s.kind === 'ide' || s.kind === 'kroog' || s.kind === 'unknown')).length;
+  return [...S.sessions.values()].filter((s) => !s.archived && !isEmptyChat(s) && s.kind !== 'sdk' && !shownKind(s.kind, S.settings)).length;
 }
 
 export function shortFile(file, cwd) {
@@ -234,4 +232,12 @@ export function lineageOf(id, edges) {
   walk(id, up);
   walk(id, down);
   return keep;
+}
+
+// Which chats the pages show: never scripts (`claude -p`, the Agent SDK); with "only editor
+// chats" on, only the editors' chats (and Kroog's own).
+export function shownKind(kind, settings = {}) {
+  if (kind === 'sdk') return false;
+  if (!settings || settings.ideOnly !== true) return true;
+  return kind === 'ide' || kind === 'kroog' || kind === 'unknown';
 }

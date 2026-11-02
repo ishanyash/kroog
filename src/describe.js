@@ -1,4 +1,4 @@
-// Turns tool calls into short plain-language lines for the Board and the chat log.
+// Turns tool calls into short plain-language lines for the week view and the chat log.
 import { truncate, shortPath, hostOf, clip } from './util.js';
 
 export function describeTool(name, input = {}) {

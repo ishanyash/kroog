@@ -1,6 +1,6 @@
 // Kroog's mod. It does one thing: after each turn, and whenever a rate-limit window moves,
 // it sends this chat's plan usage (the 5-hour and weekly windows) and cost to the Kroog
-// running on this Mac, at 127.0.0.1. It reads one file (Kroog's token, so Kroog knows the
+// running on this computer, at 127.0.0.1. It reads one file (Kroog's token, so Kroog knows the
 // reading is real), talks to no other host, and never sees credentials.
 import type { Register } from 'claude-code'
 
@@ -10,8 +10,9 @@ let token: string | null = null
 async function tokenOf($: Parameters<Parameters<Register>[0]>[2] extends (...args: infer A) => unknown ? A[0] : never): Promise<string> {
   if (token !== null) return token
   try {
-    const home = await $.env.get('HOME')
-    const read = await $.fs.read(`${home}/.kroog/token`)
+    // Kroog's folder: KROOG_HOME when set (as Kroog itself reads it), else ~/.kroog.
+    const dir = (await $.env.get('KROOG_HOME')) || `${await $.env.get('HOME')}/.kroog`
+    const read = await $.fs.read(`${dir}/token`)
     token = (typeof read === 'string' ? read : '').trim()
   } catch {
     token = ''

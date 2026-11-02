@@ -54,7 +54,9 @@ export function detectApp({ entry = '', bundle = '', term = '' } = {}) {
   };
 }
 
+// Scripts (`claude -p`, the Agent SDK) are never shown; the rest unless "only editor chats" is on.
 export function isVisible(kind, ideOnly) {
+  if (kind === 'sdk') return false;
   if (!ideOnly) return true;
   return kind === 'ide' || kind === 'kroog' || kind === 'unknown';
 }

@@ -8,7 +8,7 @@ export const DEFAULT_PORT = 4877;
 export const DEFAULT_SETTINGS = {
   port: DEFAULT_PORT,
   // Show only chats from VS Code, Cursor and other editors (and chats Kroog can't place).
-  ideOnly: true,
+  ideOnly: false,
   // How long Kroog holds a permission request for your answer before VS Code asks you instead.
   // 0 means "only show it here, answer in the editor".
   permissionHoldSeconds: 30,

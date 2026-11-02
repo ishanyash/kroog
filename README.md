@@ -1,149 +1,118 @@
 # Kroog
 
-Kroog is the map of your Claude Code chats. One browser tab shows every chat in VS Code, Cursor or the Terminal: what each one is about, what it did, which agents it used, and how the chats came from each other. Chats stay in Claude Code; Kroog is where you understand them and where you start the next one with the right context.
+**The map of your Claude Code chats.**
 
-- **See.** One week at a time, project by project. Four states: working, needs you, open, done. Hover over a chat for a one-line summary.
-- **Understand.** Open a chat for its profile: what was asked, what got done, the files, the agents and what they came back with, the notes it left, where it came from. The full conversation is one click away.
-- **Connect.** Pick two or three chats (a suggested group, or the link keys) and open a new Claude Code chat whose first message is the context they established. The chat reads it and waits for you.
-- **Remember.** A second brain: your `CLAUDE.md` files, rules, skills and Claude Code's own memory, as a map and a search, usable from inside every Claude Code chat.
-- **Burn.** Your plan's 5-hour and weekly windows at the top of every page, and a page that shows the week's pace and where the spend went: by chat, project, day and model.
+Kroog is one browser tab, on your own computer, that shows every Claude Code chat you have in VS Code, Cursor or the terminal: what each one is about, what it got done, which ones are waiting on you, and how they came from each other. Pick two or three chats and Kroog starts a new chat whose first message is what they worked out. It also shows how fast you are using your plan's limits, and where the usage went.
 
-It runs only on your Mac, with no editor plugin. Kroog was called Crew while it was a draft.
+Chats stay in Claude Code. Kroog never runs a chat, never edits your code, and never sends your data anywhere.
 
----
+![A tour of Kroog: the week view, a chat's profile, a new chat from a suggested group, and the burn page](docs/images/kroog-tour.gif)
 
-## What you need
+## Try it in a minute
 
-- A Mac with the Claude Code extension working in VS Code or Cursor, version 2.1.224 or newer. That version is the first where Kroog can message chats. To check, type `/status` in a chat and look for a "Peer address" line.
-- Node.js 20 or newer. Check with `node -v`; get it from [nodejs.org](https://nodejs.org) if needed.
-- Optional: [Ollama](https://ollama.com), for searching the second brain by meaning (`ollama pull embeddinggemma`).
+With Node 20 or newer:
+
+```
+npx github:ishanyash/kroog demo
+```
+
+A tab opens with a week of made-up chats. Nothing on your computer or in Claude Code is touched. Press Ctrl+C to stop it.
 
 ## Install
+
+You need:
+
+| | Version | Check |
+| --- | --- | --- |
+| macOS or Linux | Windows: use WSL | |
+| Node.js | 20 or newer | `node -v` |
+| Claude Code | 2.1.224 or newer; 2.1.299 or newer for the burn page | `claude --version`, or `/status` in a chat |
+| VS Code or Cursor | any recent version, for opening chats from Kroog | optional |
 
 ```
 git clone https://github.com/ishanyash/kroog.git ~/kroog
 cd ~/kroog
-node bin/kroog.js demo      # try it with made-up chats; changes nothing
-node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/settings.json first) and install its mod
+node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/settings.json first)
 node bin/kroog.js start     # run it; opens http://127.0.0.1:4877
 ```
 
-Keep the Terminal window with `start` open while you use Kroog. To update later, run `git pull` in `~/kroog`, then `node bin/kroog.js stop` and `start` again. If `start` says the port is busy, an older copy is still running: `stop` ends it.
+Keep the window with `start` open while you use Kroog. On its first start Kroog brings in your chats from the last 7 days, so the map is not empty. Chats that were already open start reporting after `/reload-plugins`, or in a new chat.
 
-**Coming from Crew?** Just run `start` (or `link`). Kroog moves `~/.crew` to `~/.kroog` and repoints Claude Code's hooks itself.
+To update: `cd ~/kroog && git pull`, then `node bin/kroog.js stop` and `start`. To remove: `node bin/kroog.js unlink`, then delete `~/kroog` and `~/.kroog`.
 
-**Something not working?** Run `node bin/kroog.js doctor`. It checks everything Kroog needs and says what to fix.
+Something not working? Run `node bin/kroog.js doctor`. It checks everything Kroog needs and says what to fix.
 
-## Using it
+## What it does
 
-### The week view
+### See: the week, project by project
 
-- Each column is a day, Monday to Sunday. Move between weeks with ‹ and › at the top, or with the ← and → keys. Times on the week view are just times, because the column says the day; everywhere else a time comes with its day ("today, 1:43 pm", "yesterday, 1:43 pm", "27 oct, 1:43 pm").
-- Each project is a band, and each box is a chat, placed on the day it started.
-- A dashed line runs from a chat to the last day it was used.
-- Lines between chats show where they came from:
-  - a solid line is a brief
-  - a dotted line is project memory
-  - a line ending in a ring is a branch
-- Hover over a chat for its one-line summary.
+![The week view: a band per project, a box per chat, lines where one chat came from another](docs/images/week-dark.png)
 
-### What moves behind the chats
+Each column is a day, each band a project, each box a chat on the day it started. Lines show where a chat came from: a solid line is a brief, a dotted line is project memory. Every chat is in one of four states: **working**, **needs you** (waiting for a permission or an answer), **open** (finished its turn, still open in your editor) and **done**. Hover a chat for a one-line summary.
 
-The week view sits on a field of pixels that shows what is going on right now. Every step a working chat takes drops a short run of cells under its box: teal for a tool call, a hollow cell for an agent's, amber when it asked you, red when a step failed. Between steps a slow trickle keeps the stream alive. A chat that needs you breathes amber; an open chat blinks now and then; a cell travels along the line into a chat that is working from one it came from. When nothing is happening the field is a calm, sparse static, and it stands still altogether if your Mac is set to reduce motion. In **Setup** you can swap the field for the fish from ishanyash.com, or for still paper.
+The pixels behind the week are live: every step a working chat takes drops a short run of cells under its box (a tool call, an agent's step, a question, a failure). It stands still if your system is set to reduce motion. Light and dark follow your system.
 
-### Light and dark
+### Understand: a short read per chat
 
-Kroog follows your Mac, or pick light or dark at the top right. Dark is its own rendering, not an inversion: tinted paper, lighter surfaces as they rise, and a calmer accent. Both modes keep every bit of text at 4.5:1 contrast and every edge at 3:1, and `npm test` checks that.
+<img src="docs/images/profile.png" width="440" alt="A chat's profile: its state, a one-line summary, and what has been done so far">
 
-### The four states
+Click a chat for its profile: up to three lines on what has been done, up to two on what is left, and two buttons, **open in VS Code** and **new chat from this**. Everything else (what was asked, the plan, the files, the agents and what they came back with, the real conversation) is folded under **more**.
 
-Every chat is in one of four states:
-- **working**: busy right now
-- **needs you**: waiting for an answer (a permission, or a question)
-- **open**: finished its turn and still open in VS Code, Cursor or a terminal, waiting for you. A small dot marks open chats.
-- **done**: not open anywhere. You can still carry it on, from Kroog or from VS Code.
+### Connect: start the next chat with the context of earlier ones
 
-Kroog reads Claude Code's own registry of open chats, so it knows which chats are open from the moment it starts. Chats with no messages in them (panels that were opened and closed) are hidden.
+<img src="docs/images/handoff.png" width="440" alt="The handoff panel: the chats picked, where the context goes, a goal, and the button that opens the new chat">
 
-### A chat's profile
+1. **Pick chats.** Take a suggested group on the **list** page (chats that look like the same work), or click the small link keys on the week view, or press **new chat from this** in a profile.
+2. **Say where it goes.** A new chat (the usual case), an existing chat, or project memory for every future chat in that folder. Add a goal if you have one.
+3. **Press the button.** VS Code opens a new chat, and the moment it appears in Claude Code's registry, Kroog sends the context into the chat's own inbox. It arrives as the first message.
+4. **The chat reads and waits.** The message says it is background, not a task: reply in a few lines with what you now know, then stop. The chat does not read, run or change anything until you ask.
 
-Click a chat to open its profile. It is a short read, not a report:
-- **At the top:** its state, where it is ("open in VS Code", or "not open now"), its project, when it started, and a one-line summary with keywords.
-- **done so far:** up to three lines on what has actually been done.
-- **from here:** up to two lines on what is left, open or failing, when there is something.
-- **At the bottom:** **open in VS Code**, and **new chat from this**.
+Kroog checks that the message arrived (Claude Code runs Kroog's hook for it). If the chat does not show up within 45 seconds, the context goes on your clipboard instead, and Kroog says so.
 
-With the AI helper on, Haiku writes those lines (and keeps them current as the chat moves); without it, Kroog takes them from the chat's own plan and last reply.
+### Burn: your plan's limits, and where the usage went
 
-Everything else is under **more**: what was asked, the plan, the files, how many edits, reads and commands, the agents it started and what each came back with, the notes Kroog kept from it, where it came from and what it led to, and the real conversation from Claude Code's own history. The **⋯** menu has summarise again, write notes, copy a summary, and hide.
+![The burn page: the 5-hour and weekly windows, the week against an even pace, and how the usage adds up by kind of token](docs/images/burn.png)
 
-When a chat asks to edit a file or run a command, the question shows at the top of its profile. Answer it in your editor, or here if Kroog is holding it.
+The chip at the top of every page shows your plan's two windows, the 5-hour one and the week, each with a mark where an even pace would be; amber means you are ahead of pace. The **burn** page adds when the week runs out at this pace, and where the last seven days went: by day, project, model and chat, and **how it adds up** by kind of token.
 
-### How chats connect
+The dollars are what the tokens would cost on the API at list price, the same figure Claude Code itself reports. On a Pro or Max plan you pay the plan's price, not this; the windows are what limit you. Most of the tokens are cache reads, because every request re-reads the conversation so far: long chats cost more per message.
 
-Every box on the week view is one Claude Code chat, and it lives in your editor. Kroog never runs a chat itself. From any chat there are two things to do:
-- **open in VS Code** goes to that chat (it says **go to it** when the chat is open right now). VS Code can open chats it made and terminal chats from the same folder.
-- **new chat from this** starts the next chat with this one's context.
-
-To combine chats, pick them first, then say where the context goes:
-1. **Pick.** Take a suggested group on the **list** page (**new chat from these**), or click the small link key on a chat and add more chats with their keys, or press **new chat from this** in a profile.
-2. **Say where.** The panel lists the chats you picked. The context can go to **a new chat** (the usual case), to **an existing chat**, or into **project memory** for every future chat in that folder. Add a goal if you have one. Then press the button.
-3. **Kroog gets the context into the chat.** For a new chat, VS Code opens one on the project folder; the moment it appears in Claude Code's registry, Kroog sends the context into it through the chat's own inbox, so it is the chat's first message. For an existing chat that is open, it goes straight in as the next message; for one that is closed, Kroog opens it in VS Code first and then sends. If the chat does not show up within 45 seconds, the context goes on your clipboard and Kroog says so: paste it and press Enter.
-4. **The chat reads and waits.** The message says it is background, not a task, and ends with what to do now: reply in a few lines with what it now knows (and how it would go about your goal, if you gave one), then stop and wait, and not read, run or change anything until you ask. The chat is named after your goal, or after the chats it came from, and Kroog draws the lines from them to it.
-5. **Kroog checks that it arrived.** Claude Code runs Kroog's hook for the message, which is the receipt. If no receipt comes within ten seconds, Kroog says so. The usual reason: a chat that skips permission prompts makes Claude Code hold messages from other sessions for your approval; approve it in the chat, or put `"crossSessionInbound": "accept"` in `~/.claude/settings.json` so they go straight in.
-
-What the context contains, per chat: what was asked, what it did and what was left (the AI helper's short lines when it has written them, else the last reply), its plan, the files it changed, and its notes. **choose what to take from each** (folded away in the panel) changes that per chat; **write it with ai** merges everything into one short brief you can edit; **copy** puts the whole message on your clipboard for anywhere else.
-
-Nothing rides in a link: VS Code drops long prompts from links, and sessions started with `claude -p` are left out of Claude Code's session picker, so a link cannot resume them. That is why chats that an older Kroog started itself cannot be opened from Kroog; their profile says so, and **new chat from this** still works for them.
-
-The first time, VS Code asks "Allow 'Claude Code for VS Code' extension to open this URI?": tick "Do not ask me again" and press Open. If Kroog had to open the project folder through a link, macOS also asks whether to open the folder in Code: tick "Allow opening local paths without asking" and press Yes. Kroog avoids that second one when VS Code's own `code` command is installed (in VS Code: "Shell Command: Install 'code' command in PATH"); **Setup** says whether it was found.
-
-**+ new chat** on a project band opens a plain new chat in VS Code on that folder; a first message, if you give one, goes in the same way.
-
-### Chats about the same work
-
-The **list** page starts with suggested groups: chats that look like the same piece of work. Each card has a name, the chats in it, and **new chat from these**, which jumps to the lineage with those chats picked and the panel ready. The × hides a suggestion. With the AI helper on, Haiku (on your plan) proposes and names the groups (the reason is a tooltip on the name); without it, Kroog groups by shared words. Haiku is asked again only when the set of chats changes, or with **look again**; the page never waits for it.
-
-### Burn
-
-The chip at the top shows your plan's two windows, the 5-hour one and the week, each as a thin bar with a mark where an even pace would be. Amber means ahead of pace. The **burn** page has the same two with their reset times, the week as a burn-up line against an even pace ("at this pace the week runs out Thursday 3 pm"), and where the last seven days' spend went: by day, by project, by model, and by chat.
-
-The numbers come from Kroog's **mod**, a small Claude Code plugin in this repo (`mod/`). After every turn, and whenever a window moves, Claude Code tells it the windows and the chat's cost, and it sends them to this Kroog at 127.0.0.1. It reads one file (Kroog's token), talks to no other host, and never sees your credentials. `node bin/kroog.js link` installs it from this folder (it updates with `git pull`); or, in any chat:
+The numbers come from Claude Code: each chat's own cost record in its transcript, and Kroog's **mod**, a small Claude Code plugin in this repository (`mod/`) that sends the plan's windows to Kroog at 127.0.0.1 after each turn. `link` installs it. To install it by hand:
 
 ```
-/plugin install kroog --marketplace ishanyash/kroog
+claude plugin install kroog --marketplace ishanyash/kroog
 ```
 
-Windows appear only on a claude.ai plan (Pro or Max). Cost per chat is Claude Code's own figure where the mod reported it; for other chats, including old ones, Kroog estimates it from the chat's transcript at list price and marks it with ~. The prices it uses are in **Setup**.
+or, inside a chat, `/plugin marketplace add ishanyash/kroog` and then `/plugin install kroog@kroog`. Windows appear only on a claude.ai plan.
 
-### Brain
+### Remember: a second brain
 
-The **brain** page is a map of what Claude Code knows about your work, with your recent chats on it. Files and chats sit in their project's cluster and are linked when they are about the same things. Search highlights the matching nodes; click a node to read it, open it in VS Code, or add it to a brief. The results also appear as a list under the map.
-
-It indexes:
-- your `~/.claude/CLAUDE.md` and rules, skills, agents, commands and plans
-- Claude Code's own memory for each project (`~/.claude/projects/<project>/memory/`)
-- each project's `CLAUDE.md` and `.claude` docs
-- your Kroog notes
-
-It never reads settings, keys or chat transcripts. With Ollama running, it searches by meaning; without it, by keyword. Press **add to claude code** to add the `kroog-brain` tool to Claude Code; new chats can then look things up in your brain on their own. "Use in a brief" adds a result to a handoff.
+The **brain** page is a map and a search over what Claude Code already knows about your work: your `CLAUDE.md` files, rules, skills, agents, commands and plans, Claude Code's own memory for each project, and your Kroog notes. It never indexes settings, keys or transcripts. With [Ollama](https://ollama.com) and `embeddinggemma` it searches by meaning; without, by keyword. **add to claude code** gives every new chat a `kroog-brain` tool to look things up itself.
 
 ### The AI helper
 
-The AI helper writes the one-line summaries, merged briefs and library notes. By default it uses Claude Code with Haiku, on your Claude plan. Each call takes about 3 seconds, never shows up as a chat, and counts toward your plan's usage like any chat. Instead, you can pick your own Anthropic API key or a local Ollama model in **Setup**, and set a daily cap.
+The short lines (summaries, "done so far", group names, merged briefs) are written by a small model. By default that is Claude Code itself with Haiku, on your plan: about 3 seconds a call, never shown as a chat, with a daily cap (200 by default). In **Setup** you can use your own Anthropic API key or a local Ollama model instead, or turn it off; Kroog then takes the lines from each chat's own plan and last reply.
+
+## Privacy and safety
+
+- Kroog listens on `127.0.0.1` only. Other computers cannot reach it, and other websites cannot call it or show it in a frame.
+- Hooks and the mod must carry Kroog's secret token (`~/.kroog/token`, readable by you only).
+- Kroog never reads Claude Code's credentials or your Keychain, never edits your code, and never runs a chat. A message from Kroog arrives as a message from another session, which Claude Code never treats as your approval.
+- No telemetry, no analytics, no update checks. The AI helper's input goes to Anthropic through Claude Code like any chat, or stays on your computer with Ollama.
+
+[SECURITY.md](SECURITY.md) lists exactly what Kroog reads, writes and connects to. `test/boundary.test.js` fails the build if the code steps outside that list, and `node bin/kroog.js doctor` prints it with your own paths.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `node bin/kroog.js demo` | Try it with made-up chats. Changes nothing. |
-| `node bin/kroog.js link` | Connect Claude Code to Kroog, and install the mod (`--no-mod` to skip). |
-| `node bin/kroog.js start` | Run Kroog. Also brings in your chats from the last 7 days (`--no-import` to skip). |
-| `node bin/kroog.js stop` | Stop the Kroog (or old Crew) that is running. |
-| `node bin/kroog.js doctor` | Check everything and say what to fix. |
-| `node bin/kroog.js status` | Show what is linked and where Kroog keeps its files. |
-| `node bin/kroog.js unlink` | Remove Kroog's hooks. |
-| `node bin/kroog.js mcp` | The `kroog-brain` tool. Claude Code starts this itself. |
+| `node bin/kroog.js demo` | Made-up chats. Changes nothing. |
+| `node bin/kroog.js link` | Connect Claude Code to Kroog and install the mod (`--no-mod` to skip it). Safe to run again. |
+| `node bin/kroog.js start` | Run Kroog. Brings in the last 7 days of chats on the first run (`--no-import` to skip). |
+| `node bin/kroog.js stop` | Stop the Kroog that is running. |
+| `node bin/kroog.js doctor` | Check everything and print what Kroog touches. |
+| `node bin/kroog.js status` | What is linked, and where Kroog keeps its files. |
+| `node bin/kroog.js unlink` | Remove the hooks and the mod. Your data in `~/.kroog` stays. |
 
 Add `--port 4878` to `link` and `start` to use another port.
 
@@ -152,41 +121,46 @@ Add `--port 4878` to `link` and `start` to use another port.
 | What | Where |
 | --- | --- |
 | The app | wherever you cloned it, for example `~/kroog` |
-| Kroog's data: chats for the last 14 days, notes, briefs, chat inboxes, usage readings (30 days), the brain index, settings, token, hook script, backups | `~/.kroog` |
+| Kroog's data: chats for the last 14 days, notes, briefs, usage readings (30 days), the brain index, settings, token, hook script, backups | `~/.kroog` |
+| An API key, only if you add one | `~/.kroog/.env` (never your shell profile) |
 | The hooks | `~/.claude/settings.json` |
-| The page | `http://127.0.0.1:4877`, on your Mac only |
+| The page | `http://127.0.0.1:4877`, on your computer only |
 
 ## How it works
 
-- **Hooks.** `link` adds hooks to Claude Code's settings. Each one runs `~/.kroog/hook.sh`, which tells Kroog what the chat is doing and where its inbox is. When Kroog isn't running, the hook gives up in a moment and changes nothing.
-- **The registry.** Claude Code keeps a list of its running chats in `~/.claude/sessions/` (id, folder, busy or idle, inbox). Kroog reads it every few seconds. That's how a chat opened before Kroog started still shows as open.
-- **Sending context into a chat** uses that chat's inbox, a private socket Claude Code opens for each chat. In the editor it arrives as a message from another session, so it can never approve anything for you. A new chat from Kroog works the same way: VS Code opens it, the registry shows it, and the context goes in.
-- **Inboxes.** Since Claude Code 2.1.224, every chat has a private inbox, a socket only your user can reach. Kroog sends your messages and briefs there.
-- **Conversations.** The conversation shown in a chat's panel comes from Claude Code's own history file for that chat.
-- **What the page gets.** The browser gets each chat's newest 40 steps and the counts of the rest, not the whole chat, and a working chat's updates a few times a second at most. Kroog saves its state at most every 5 seconds, off the main thread. With a few hundred chats, the earlier way of doing all three was what made it slow.
-- **Claude Code on your Mac.** The AI helper uses Claude Code itself (`claude -p`, with Haiku), with your usual login and settings. If `claude` isn't installed for the Terminal, Kroog uses the copy inside the VS Code extension.
-
-## Safety and privacy
-
-- Kroog only listens on `127.0.0.1`. Other computers can't reach it.
-- Hooks and the mod must carry a secret token, and other websites can't send commands to Kroog or show it inside their pages.
-- Kroog never edits your code and never runs a chat. A message from Kroog can't approve permissions; Claude Code always asks you.
-- The AI helper's input goes to Anthropic, like any Claude Code chat. With Ollama it stays on your Mac. The brain index and the usage readings stay on your Mac. There is no telemetry.
-- Kroog never reads your credentials: not `~/.claude/.credentials.json`, not the Keychain. `SECURITY.md` lists exactly what it reads, writes and connects to, `test/boundary.test.js` fails the build if the code steps outside that, and `node bin/kroog.js doctor` prints the list with your paths.
+- **Hooks.** `link` adds hooks to Claude Code's settings. Each runs `~/.kroog/hook.sh`, which tells Kroog what a chat is doing. When Kroog is not running, the hook gives up in a moment and changes nothing.
+- **The registry.** Claude Code keeps a list of its running chats in `~/.claude/sessions/`. Kroog reads it, so it knows which chats are open from the moment it starts.
+- **Inboxes.** Every Claude Code chat has a private inbox, a socket only your user can reach. Kroog sends context there; that is also how a brand-new chat gets its first message.
+- **Transcripts.** A chat's conversation and its cost come from Claude Code's own files in `~/.claude/projects/`. Kroog reads them and never changes them.
+- **The mod.** A Claude Code plugin that reports the plan's usage windows, using Claude Code's plugin API.
 
 ## Limits
 
-- Messaging chats and seeing which are open need Claude Code 2.1.224 or newer.
-- **open in VS Code** for a chat Kroog started needs VS Code to have that project folder open. Kroog opens the folder first.
-- While Kroog holds a permission question, VS Code shows that chat as busy.
-- Claude Code's history format and hook behaviour can change between versions.
+- Built on macOS with VS Code. On Linux, the map, the terminal chats, the burn page and context into open and new chats have been tested with real Claude Code; opening chats in VS Code on Linux has not. Windows needs WSL.
+- Opening a chat from Kroog works best in VS Code; Cursor chats show up, but opening them from Kroog is less tested.
+- Claude Code's registry, inbox, hooks and transcript format are partly internal and can change between versions. When something changes, Kroog falls back (for example to the clipboard) and says so.
+- Plan windows need a Pro or Max plan and Claude Code 2.1.299 or newer.
+
+## Questions
+
+**Is this made by Anthropic?** No. It is an independent open-source tool built on Claude Code's public features.
+
+**Does it cost anything?** Kroog is free. The AI helper's calls count toward your plan like a short chat, with a daily cap; turn it off in Setup if you like.
+
+**Why not just ask Claude Code to summarise old chats?** You can, one chat at a time. Kroog keeps short summaries current for all of them, across editors and the terminal, and turns several chats into the start of the next one with one button.
+
+**Can Kroog approve things in my chats?** No. Messages from Kroog arrive as messages from another session, and Claude Code never treats those as your approval.
+
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). `npm test` runs the checks, including the style rules and the privacy boundary.
 
 ## Licence
 
-MIT. See `LICENSE`, and `NOTICE` for what Kroog ships with. Contributions: `CONTRIBUTING.md`.
+MIT. See [LICENSE](LICENSE), and [NOTICE](NOTICE) for what Kroog ships with.
 
 ## Credits
 
 - The font is IBM Plex Mono, under the SIL Open Font License (`public/fonts/LICENSE-IBM-Plex.txt`).
-- The fish come from the [ascii-sharks](https://github.com/stackedlol/ascii-sharks) ocean (MIT License, `public/water-LICENSE.txt`), as set up for ishanyash.com, with the sharks left out.
+- The fish come from the [ascii-sharks](https://github.com/stackedlol/ascii-sharks) ocean (MIT License, `public/water-LICENSE.txt`).
 - The look follows the floor set by [Hallmark](https://github.com/nutlope/hallmark) (MIT License): colours and type as tokens, contrast in both modes, visible focus, no animated layout, and motion that stops when you ask it to. `test/style.test.js` keeps those rules.

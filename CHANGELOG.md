@@ -2,6 +2,17 @@
 
 Dates are 2026.
 
+## 1.5.0, 2 November: ready for the public
+
+- A README for people who have never heard of Kroog, a one-page website in `docs/` (for GitHub Pages), a 30-second tour as a GIF and a video, screenshots, and a social preview image.
+- Terminal chats show by default. Scripts (`claude -p`, the Agent SDK) never show. "Only editor chats" is still in Setup, and a setting saved before is kept.
+- Kroog's own updates (an AI summary, hiding a chat) no longer move a chat's time; only what the chat does moves it.
+- Try it without installing: `npx github:ishanyash/kroog demo`. Outside a git clone, `link` installs the mod from GitHub. The mod honours `KROOG_HOME`. The install line for the mod is the Terminal one. On Windows, `link` says to use WSL.
+- Burn keeps fractions of a cent, so a short Haiku chat no longer reads as 0. Haiku 5.5 prices checked against Claude Code's own figure.
+- "This computer" instead of "this Mac". The demo's projects and text are generic, in dollars.
+- GitHub Actions runs the tests on macOS and Linux, Node 20 and 22.
+- Tested end to end on Linux with real Claude Code 2.1.316: the hooks and the map, the mod installed from GitHub and from a clone with its readings arriving, the context sent into an open chat and into a brand-new chat (each replied in a few lines with no tool calls), and the burn report from real transcripts.
+
 ## 1.4.1, 30 October
 
 - Burn counts only the seven days it shows. Before, a chat used this week counted with everything it had spent since it started, so the header could be many times the sum of the days.

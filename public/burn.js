@@ -8,7 +8,7 @@ const B = { view: null, report: null, loading: false, timer: null, at: 0, error:
 function money(usd, { exact = true } = {}) {
   if (usd == null) return '';
   const n = Number(usd);
-  const s = n >= 100 ? `$${Math.round(n)}` : n >= 10 ? `$${n.toFixed(1)}` : `$${n.toFixed(2)}`;
+  const s = n >= 100 ? `$${Math.round(n)}` : n >= 10 ? `$${n.toFixed(1)}` : n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`;
   return exact ? s : `~${s}`;
 }
 

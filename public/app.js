@@ -2,7 +2,7 @@
 import {
   $, $$, esc, trim, clipText, words, lowerFirst, plural, EDITORS, NOTE_TYPES,
   dur, clock, dayish, countdownText, edName, editorUrl, bucket, look, whenText, lineText, firstLine,
-  visibleSessions, hiddenByScope, shortFile, folderName, tildePath, cellsHtml,
+  visibleSessions, hiddenByScope, shownKind, shortFile, folderName, tildePath, cellsHtml,
 } from './util.js';
 import { renderBrain } from './brain.js';
 import { mountLineage, unmountLineage, renderLineage, isMounted, fit, zoomBy, reveal, nextNeeding, setBackground, themeChanged, shiftWeek } from './lineage.js';
@@ -158,7 +158,7 @@ function connect() {
 
 function alertIfNeeded(before, s) {
   if (!before || before === s.status) return;
-  const shown = S.settings.ideOnly === false || s.kind === 'ide' || s.kind === 'kroog' || s.kind === 'unknown';
+  const shown = shownKind(s.kind, S.settings);
   if (!shown || s.archived) return;
   let title = null;
   let body = '';
@@ -1243,7 +1243,7 @@ function renderSetup() {
       </div></section>
 
       <section class="set"><h2>Which chats</h2><div class="body">
-        <label class="check"><input type="checkbox" id="set-ide" ${st.ideOnly !== false ? 'checked' : ''}><span>only chats in VS Code, Cursor and other editors</span></label>
+        <label class="check"><input type="checkbox" id="set-ide" ${st.ideOnly === true ? 'checked' : ''}><span>only chats in VS Code, Cursor and other editors</span></label>
         <p class="quiet">Hides chats from the Claude desktop app and from terminals outside an editor. ${plural(hiddenByScope(S), 'chat')} hidden now. Chats on claude.ai never reach Kroog.</p>
       </div></section>
 

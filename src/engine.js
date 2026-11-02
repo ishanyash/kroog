@@ -759,7 +759,7 @@ export class Engine {
     const s = this.store.session(sid);
     if (!s) return { ok: false, error: 'That chat is gone.' };
     s.archived = Boolean(on);
-    this.store.touch(s);
+    this.store.changed(s);
     return { ok: true };
   }
 

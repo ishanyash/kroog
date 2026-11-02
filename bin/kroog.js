@@ -35,7 +35,7 @@ import { burnReport } from '../src/burn.js';
 import { modStatus, installMod, uninstallMod, installLine, isClone } from '../src/mod.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.4.1';
+const VERSION = '1.5.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
@@ -67,7 +67,7 @@ function printLinkResult(result) {
   console.log(`  Hooks added to: ${result.settingsPath}`);
   console.log(`  Backup of the old file: ${result.backupPath}`);
   console.log(`  Relay script: ${result.scriptPath}`);
-  console.log('Start a new chat in VS Code or Cursor (or reload the window) and it appears on the Board.');
+  console.log('Start a new chat in VS Code, Cursor or the terminal (or run /reload-plugins in an open one) and it appears in Kroog.');
 }
 
 async function start({ demo }) {
@@ -350,7 +350,7 @@ async function start({ demo }) {
       const status = linkStatus();
       if (!status.linked) console.log('Not linked to Claude Code yet. Run: node bin/kroog.js link (or use the Setup page).');
       else if (status.scriptPort && status.scriptPort !== port) console.log(`Linked to port ${status.scriptPort}, but running on ${port}. Run link again with --port ${port}.`);
-      else console.log('Linked to Claude Code. New events from your editor chats appear on the Board.');
+      else console.log('Linked to Claude Code. What your chats do appears here as it happens.');
       if (!flag('no-import')) {
         importRecent(store, { days: 7, limit: 40 })
           .then((r) => {

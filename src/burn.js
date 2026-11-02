@@ -5,8 +5,9 @@
 // in where Claude Code did not record one.
 import { DEFAULT_PRICES, PRICES_AS_OF, KINDS, dayKey } from './cost.js';
 
+// Four places: a short chat on Haiku costs a fraction of a cent, and should not read as 0.
 function round(x) {
-  return Math.round(x * 100) / 100;
+  return Math.round(x * 10000) / 10000;
 }
 
 // The demo has no transcripts: a made-up spend per chat, steady across runs, shaped like

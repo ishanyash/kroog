@@ -148,7 +148,7 @@ export class AiHelper {
       this.pending.add(id);
       this.queue.push(id);
       s.aiPending = true;
-      this.store.touch(s);
+      this.store.changed(s);
       this.pump();
     }
     return { ok: true, queued: true };
@@ -171,7 +171,7 @@ export class AiHelper {
           this.busy -= 1;
           this.pending.delete(id);
           const s = this.store.session(id);
-          if (s) { s.aiPending = false; this.store.touch(s); }
+          if (s) { s.aiPending = false; this.store.changed(s); }
           this.store.emit('info');
           this.pump();
         });

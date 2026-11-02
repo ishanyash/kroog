@@ -176,8 +176,15 @@ export class Store extends EventEmitter {
     }
   }
 
+  // Something happened in the chat: it moves to now.
   touch(s) {
     s.lastAt = Date.now();
+    this.changed(s);
+  }
+
+  // Kroog changed what it knows about the chat (a summary, hidden or shown); the chat's
+  // own time stays where it was.
+  changed(s) {
     this.scheduleSave();
     this.emit('session', s);
   }

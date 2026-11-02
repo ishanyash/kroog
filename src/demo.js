@@ -71,13 +71,13 @@ export function startDemo({ engine, store }) {
       await h('PreToolUse', weekly, costDir, 'vscode', { tool_name: 'Read', tool_input: { file_path: `${costDir}/${f}` }, tool_use_id: `seed-w-${f}` });
       await h('PostToolUse', weekly, costDir, 'vscode', { tool_name: 'Read', tool_input: { file_path: `${costDir}/${f}` }, tool_use_id: `seed-w-${f}`, tool_response: {} });
     }
-    await h('Stop', weekly, costDir, 'vscode', { last_assistant_message: 'About £38 a week. The orders models are 60% of it, mostly full refreshes that could be incremental.' });
+    await h('Stop', weekly, costDir, 'vscode', { last_assistant_message: 'About $40 a week. The orders models are 60% of it, mostly full refreshes that could be incremental.' });
     // Started four days ago, picked up again yesterday and this morning.
     place(weekly, 6060, [6040, 1640, 190]);
 
     // Finished earlier today, started from a brief about yesterday's chat.
     const cost = newId();
-    const fromWeekly = briefFrom([weekly], [], 'Add a cost check to dbt dry runs: estimate each run and stop anything over £5.', 'vscode');
+    const fromWeekly = briefFrom([weekly], [], 'Add a cost check to dbt dry runs: estimate each run and stop anything over $5.', 'vscode');
     await h('SessionStart', cost, costDir, 'vscode', { source: 'startup' });
     await h('UserPromptSubmit', cost, costDir, 'vscode', { prompt: fromWeekly.prompt });
     await h('PreToolUse', cost, costDir, 'vscode', { tool_name: 'TodoWrite', tool_input: { todos: [
@@ -90,16 +90,16 @@ export function startDemo({ engine, store }) {
       await h('PreToolUse', cost, costDir, 'vscode', { tool_name: 'Edit', tool_input: { file_path: `${costDir}/${f}` }, tool_use_id: `seed-${f}` });
       await h('PostToolUse', cost, costDir, 'vscode', { tool_name: 'Edit', tool_input: { file_path: `${costDir}/${f}` }, tool_use_id: `seed-${f}`, tool_response: {} });
     }
-    await h('Stop', cost, costDir, 'vscode', { last_assistant_message: 'Done. Each dbt run now gets a dry-run estimate first.\n\n- Runs over £5 stop before they start; runs over £2 show a warning.\n- The limits live in dbt_project.yml under vars.cost_gate.\n- 6 new tests in tests/test_cost_gate.py, all passing.\n\nCheck a model on its own with: dbt run-operation estimate_cost --args \'{model: stg_orders}\'' });
+    await h('Stop', cost, costDir, 'vscode', { last_assistant_message: 'Done. Each dbt run now gets a dry-run estimate first.\n\n- Runs over $5 stop before they start; runs over $2 show a warning.\n- The limits live in dbt_project.yml under vars.cost_gate.\n- 6 new tests in tests/test_cost_gate.py, all passing.\n\nCheck a model on its own with: dbt run-operation estimate_cost --args \'{model: stg_orders}\'' });
     place(cost, 110, [100, 48]);
 
     const faq = newId();
     const siteDir = `${home}/my-site`;
     await h('SessionStart', faq, siteDir, 'cursor', { source: 'startup' });
-    await h('UserPromptSubmit', faq, siteDir, 'cursor', { prompt: 'Draft the coaching FAQ using only facts already on the site.' });
-    await h('PreToolUse', faq, siteDir, 'cursor', { tool_name: 'Write', tool_input: { file_path: `${siteDir}/content/coaching.md` }, tool_use_id: 'seed-faq' });
-    await h('PostToolUse', faq, siteDir, 'cursor', { tool_name: 'Write', tool_input: { file_path: `${siteDir}/content/coaching.md` }, tool_use_id: 'seed-faq', tool_response: {} });
-    await h('Stop', faq, siteDir, 'cursor', { last_assistant_message: 'Drafted 8 answers in content/coaching.md. Every answer uses only facts already on the site, and each links to the page it comes from.' });
+    await h('UserPromptSubmit', faq, siteDir, 'cursor', { prompt: 'Draft the pricing FAQ using only facts already on the site.' });
+    await h('PreToolUse', faq, siteDir, 'cursor', { tool_name: 'Write', tool_input: { file_path: `${siteDir}/content/pricing.md` }, tool_use_id: 'seed-faq' });
+    await h('PostToolUse', faq, siteDir, 'cursor', { tool_name: 'Write', tool_input: { file_path: `${siteDir}/content/pricing.md` }, tool_use_id: 'seed-faq', tool_response: {} });
+    await h('Stop', faq, siteDir, 'cursor', { last_assistant_message: 'Drafted 8 answers in content/pricing.md. Every answer uses only facts already on the site, and each links to the page it comes from.' });
     place(faq, 3020, [3010, 2990]);
 
     const rename = newId();
@@ -120,7 +120,7 @@ export function startDemo({ engine, store }) {
     await h('UserPromptSubmit', term, `${home}/scripts`, 'terminal', { prompt: 'Write a backup script for my photos.' });
 
     const notes = [
-      { type: 'Decision', text: 'Runs over £5 stop before they start; runs over £2 warn.', sid: cost, cwd: costDir },
+      { type: 'Decision', text: 'Runs over $5 stop before they start; runs over $2 warn.', sid: cost, cwd: costDir },
       { type: 'How-to', text: "Check one model's cost first: dbt run-operation estimate_cost --args '{model: stg_orders}'.", sid: cost, cwd: costDir },
       { type: 'Finding', text: 'The cost limits live in dbt_project.yml under vars.cost_gate.', sid: cost, cwd: costDir },
       { type: 'Decision', text: 'Every FAQ answer uses only facts already on the site.', sid: faq, cwd: siteDir, remembered: true },
@@ -243,14 +243,14 @@ export function startDemo({ engine, store }) {
     const sid = newId();
     const cwd = `${home}/my-site`;
     await h('SessionStart', sid, cwd, 'vscode', { source: 'startup' });
-    await h('UserPromptSubmit', sid, cwd, 'vscode', { prompt: "Draft this week's post: Power BI in UK analyst ads. Use the house style." });
+    await h('UserPromptSubmit', sid, cwd, 'vscode', { prompt: "Draft this week's post: what we learned moving to incremental models. Use the house style." });
     const sections = ['the opening', 'section 2 of 4', 'section 3 of 4', 'section 4 of 4', 'the summary'];
     await tool(sid, cwd, 'vscode', 'TodoWrite', { todos: [
       { content: 'Collect the numbers and their sources', status: 'in_progress' },
       { content: 'Write the four sections', status: 'pending' },
       { content: 'Check every number against its page', status: 'pending' },
     ] });
-    await tool(sid, cwd, 'vscode', 'WebSearch', { query: 'IT Jobs Watch Power BI data analyst UK' });
+    await tool(sid, cwd, 'vscode', 'WebSearch', { query: 'dbt incremental models full refresh cost' });
     await tool(sid, cwd, 'vscode', 'WebFetch', { url: 'https://www.itjobswatch.co.uk/jobs/uk/power%20bi.do' });
     await tool(sid, cwd, 'vscode', 'TodoWrite', { todos: [
       { content: 'Collect the numbers and their sources', status: 'completed' },
@@ -260,7 +260,7 @@ export function startDemo({ engine, store }) {
     let round = 0;
     while (!stopped) {
       const label = sections[round % sections.length];
-      const r = await tool(sid, cwd, 'vscode', 'Edit', { file_path: `${cwd}/content/posts/power-bi-analyst-ads.md` });
+      const r = await tool(sid, cwd, 'vscode', 'Edit', { file_path: `${cwd}/content/posts/incremental-models.md` });
       if (r.stopped) return;
       const s = store.session(sid);
       if (s) {

@@ -187,3 +187,13 @@ test('the week counts only the requests made in it, not the chat\'s whole life',
   assert.equal(r.requests, 1);
   assert.equal(r.contextPerRequest, 1e6);
 });
+
+test('Kroog\'s own updates (a summary, hiding) do not move a chat\'s time; chat activity does', () => {
+  const store = new Store();
+  const s = store.ensureSession('t', '/x/app');
+  s.lastAt = 1000;
+  store.changed(s);
+  assert.equal(s.lastAt, 1000);
+  store.touch(s);
+  assert.ok(s.lastAt > 1000);
+});

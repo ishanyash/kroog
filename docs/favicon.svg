@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <style>.cell { fill: #15191b; } .cur { fill: #1e6b60; } .water { stroke: #15191b; } @media (prefers-color-scheme: dark) { .cell { fill: #e4e1d7; } .cur { fill: #62c4ac; } .water { stroke: #e4e1d7; } }</style>
+  <rect class="cell" x="3" y="10" width="3.6" height="3.6" rx="0.6" opacity="0.55"/>
+  <rect class="cell" x="7.7" y="10" width="3.6" height="3.6" rx="0.6" opacity="0.75"/>
+  <rect class="cell" x="12.4" y="10" width="3.6" height="3.6" rx="0.6"/>
+  <rect class="cur" x="17.1" y="5.6" width="3.6" height="8" rx="0.6"/>
+  <path class="water" d="M2.5 18.5 c 2.4 -2.2 4.4 -2.2 6.8 0 c 2.4 2.2 4.4 2.2 6.8 0 c 2 -1.9 3.8 -2.1 5.6 -0.4" fill="none" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -1,7 +1,7 @@
 {
   "name": "kroog",
-  "version": "1.4.1",
-  "description": "Kroog: the map of your Claude Code chats. See what each chat is about, what it did and where it came from, and start the next one with the right context. Runs only on your Mac.",
+  "version": "1.5.0",
+  "description": "Kroog: the map of your Claude Code chats. See what each chat did and how they connect, start the next chat with the context of earlier ones, and watch your plan's usage. Runs only on your computer.",
   "type": "module",
   "private": true,
   "bin": {
@@ -23,7 +23,7 @@
     "type": "git",
     "url": "https://github.com/ishanyash/kroog.git"
   },
-  "homepage": "https://github.com/ishanyash/kroog#readme",
+  "homepage": "https://ishanyash.github.io/kroog/",
   "bugs": {
     "url": "https://github.com/ishanyash/kroog/issues"
   },
@@ -31,10 +31,12 @@
   "keywords": [
     "claude-code",
     "claude",
+    "claude-code-plugin",
+    "developer-tools",
+    "local-first",
+    "ai-coding",
     "chats",
-    "map",
-    "local",
-    "mac"
+    "map"
   ],
   "files": [
     "bin",
