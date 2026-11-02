@@ -5,7 +5,7 @@
 //   - notes for the Library (see notes.js).
 //
 // Where the model runs, in order of preference ("auto"):
-//   claude  Claude Code on this Mac with Haiku, on your Claude subscription. Hooks off,
+//   claude  Claude Code on this computer with Haiku, on your Claude subscription. Hooks off,
 //           no tools, nothing saved, so it never shows up as a chat.
 //   api     Kroog's own Anthropic API key (~/.kroog/.env), Claude Haiku 5.5.
 //   ollama  a local model through Ollama (http://127.0.0.1:11434). Free and offline.
@@ -109,7 +109,7 @@ export class AiHelper {
       const data = await response.json();
       return (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
     }
-    // Ollama, on this Mac.
+    // Ollama, on this computer.
     const base = (this.getSettings().ollamaUrl || 'http://127.0.0.1:11434').replace(/\/$/, '');
     let response;
     try {
@@ -119,7 +119,7 @@ export class AiHelper {
         body: JSON.stringify({ model: this.getSettings().ollamaModel || 'llama3.2', stream: false, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], options: { num_predict: maxTokens } }),
       });
     } catch {
-      throw new Error('Ollama is not running on this Mac. Start it, or pick another helper in setup.');
+      throw new Error('Ollama is not running on this computer. Start it, or pick another helper in setup.');
     }
     if (!response.ok) throw new Error(`Ollama answered ${response.status}. Is the model "${this.getSettings().ollamaModel || 'llama3.2'}" pulled?`);
     const data = await response.json();

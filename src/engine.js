@@ -78,7 +78,7 @@ function lowerFirst(text) {
 export class Engine {
   constructor({ store, getSettings, notes = null, hasViewers = () => true, inbox = null, presence = null, copy = null, editor = null }) {
     this.store = store;
-    // Puts text on this Mac's clipboard (see clipboard.js); swapped out in tests.
+    // Puts text on this computer's clipboard (see clipboard.js); swapped out in tests.
     this.copy = copy || ((text) => copyText(text).catch(() => false));
     // Opens folders and chats in VS Code or Cursor (see editor.js); swapped out in tests.
     this.editor = editor || new EditorOpener({});

@@ -1,6 +1,6 @@
 # What Kroog touches, and what it never does
 
-Kroog runs on your Mac and maps the Claude Code chats on it. This page is the boundary it keeps, in plain words. `test/boundary.test.js` fails the build if the code steps outside it, and `node bin/kroog.js doctor` prints the live version of this list.
+Kroog runs on your computer and maps the Claude Code chats on it. This page is the boundary it keeps, in plain words. `test/boundary.test.js` fails the build if the code steps outside it, and `node bin/kroog.js doctor` prints the live version of this list.
 
 ## Reads
 
@@ -28,11 +28,11 @@ Never: `~/.claude/.credentials.json`, the macOS Keychain, any `.env`, your proje
 
 ## Scope
 
-- Claude Code chats on this Mac: VS Code, Cursor, other editors, and the terminal. Claude Code's cloud sessions show up only as the local sessions they drive.
+- Claude Code chats on this computer: VS Code, Cursor, other editors, and the terminal. Claude Code's cloud sessions show up only as the local sessions they drive.
 - Kroog never runs a chat and never approves anything. A message from Kroog arrives in a chat as a message from another session, which Claude Code will not treat as your approval. The context a new chat receives tells it to read and wait.
-- One Mac, one Kroog, one `~/.kroog`. Nothing is shared or synced.
+- One computer, one Kroog, one `~/.kroog`. Nothing is shared or synced.
 
-## What someone on your Mac could do
+## What someone else on your computer could do
 
 - Read `~/.kroog`: your notes, briefs and chat summaries, and the usage readings. Keep your user account yours.
 - With Kroog's token (`~/.kroog/token`, readable by your user only), send messages into your open chats through Kroog. Those messages cannot approve anything.
@@ -40,4 +40,4 @@ Never: `~/.claude/.credentials.json`, the macOS Keychain, any `.env`, your proje
 
 ## Reporting a problem
 
-Open an issue on GitHub, or write to the address in `package.json`. Say what Kroog read, wrote or sent that it should not have, and how to repeat it.
+For anything sensitive, use GitHub's private reporting: the repository's **Security** tab, then **Report a vulnerability**. For everything else, open an issue. Say what Kroog read, wrote or sent that it should not have, and how to repeat it.

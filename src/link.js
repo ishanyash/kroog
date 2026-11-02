@@ -1,5 +1,5 @@
 // Links Kroog to Claude Code by adding a few hooks to ~/.claude/settings.json.
-// Every Claude Code chat on this Mac (VS Code, Cursor, terminal) reads that file, so no
+// Every Claude Code chat on this computer (VS Code, Cursor, terminal) reads that file, so no
 // editor plugin is needed. Each hook runs ~/.kroog/hook.sh, which forwards the event to
 // Kroog on 127.0.0.1 and prints Kroog's answer. If Kroog isn't running, it prints nothing.
 
@@ -34,7 +34,7 @@ export function hookScript({ port = DEFAULT_PORT, tokenPath }) {
   return `#!/bin/sh
 # Kroog hook relay, written by \`kroog link\`. Safe to delete with \`kroog unlink\`.
 # Claude Code runs this for each event in your chats. It forwards the event to the
-# Kroog app on this Mac (127.0.0.1 only) and prints Kroog's answer. If Kroog isn't
+# Kroog app on this computer (127.0.0.1 only) and prints Kroog's answer. If Kroog isn't
 # running, it prints nothing and exits 0, so your chat carries on as before.
 EVENT="$1"
 TOKEN=$(cat ${shQuote(tokenPath)} 2>/dev/null)

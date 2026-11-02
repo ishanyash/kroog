@@ -25,7 +25,7 @@ export class Runner {
     this.getSettings = getSettings;
     this.demo = demo;
     this.procs = new Map();
-    // Opens a vscode:// link on this Mac (Kroog runs here, so it can, without the browser).
+    // Opens a vscode:// link on this computer (Kroog runs here, so it can, without the browser).
     this.open = opener || ((url) => {
       if (demo) return;
       const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
@@ -74,7 +74,7 @@ export class Runner {
   // ---- start a turn -----------------------------------------------------------------
 
   run({ mode = 'new', id = null, from = null, cwd = '', prompt = '', title = '', input = null, label = '', permissionMode, then = '', editor = '', model = '' } = {}) {
-    if (!this.available()) return { ok: false, error: 'Kroog could not find Claude Code on this Mac. See setup.' };
+    if (!this.available()) return { ok: false, error: 'Kroog could not find Claude Code on this computer. See setup.' };
     const text = String(prompt || '').trim();
     if (!text) return { ok: false, error: 'Type a message first.' };
     if (text.length > 60000) return { ok: false, error: 'That is too long for one message.' };
@@ -94,7 +94,7 @@ export class Runner {
       id = randomUUID();
     }
     const s = mode === 'resume' ? store.session(id) : store.ensureSession(id, cwd);
-    if (!s.cwd || (!this.demo && !fs.existsSync(s.cwd))) return { ok: false, error: `The project folder ${s.cwd || '(none)'} is not on this Mac.` };
+    if (!s.cwd || (!this.demo && !fs.existsSync(s.cwd))) return { ok: false, error: `The project folder ${s.cwd || '(none)'} is not on this computer.` };
 
     if (mode !== 'resume') {
       Object.assign(s, {

@@ -307,7 +307,7 @@ export function createServer({ port, token, engine, store, mode, getSettings, up
 
   const server = http.createServer(async (req, res) => {
     try {
-      // Only answer requests addressed to this Mac by name, which blocks DNS-rebinding tricks.
+      // Only answer requests addressed to this computer by name, which blocks DNS-rebinding tricks.
       if (!allowedHosts.has(String(req.headers.host || '').toLowerCase())) {
         res.writeHead(403);
         return res.end();

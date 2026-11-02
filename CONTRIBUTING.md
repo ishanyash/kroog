@@ -1,12 +1,12 @@
 # Contributing to Kroog
 
-Kroog is the map of your Claude Code chats, and it runs only on your Mac. Changes that keep it that way are welcome.
+Kroog is the map of your Claude Code chats, and it runs only on your computer. Changes that keep it that way are welcome.
 
 ## What Kroog is, and is not
 
 - It maps Claude Code chats: VS Code, Cursor, other editors, the terminal. Not other agents or assistants.
 - It shows and explains; it does not chat, and it never runs a chat. Context goes into chats through Claude Code's own inbox, and the chat is told to read and wait.
-- It is local: one Mac, one Kroog, one `~/.kroog`. No accounts, no server, no telemetry. `SECURITY.md` is the boundary, and `test/boundary.test.js` keeps it. A change that needs a new host, a new file outside the boundary, or a credential, needs a conversation first: open an issue before the code.
+- It is local: one computer, one Kroog, one `~/.kroog`. No accounts, no server, no telemetry. `SECURITY.md` is the boundary, and `test/boundary.test.js` keeps it. A change that needs a new host, a new file outside the boundary, or a credential, needs a conversation first: open an issue before the code.
 - It is written in plain words. Buttons and messages say what happens, in short sentences, without jargon.
 
 ## Working on it
@@ -14,7 +14,7 @@ Kroog is the map of your Claude Code chats, and it runs only on your Mac. Change
 ```
 git clone https://github.com/ishanyash/kroog.git
 cd kroog
-node bin/kroog.js demo       # made-up chats, nothing on your Mac is touched
+node bin/kroog.js demo       # made-up chats, nothing on your computer is touched
 npm test                     # 80 or so tests, no network needed
 claude plugin validate mod   # the mod, if you changed it
 ```
@@ -26,9 +26,9 @@ The code follows a few rules you can see in the tests: every colour and font is 
 ## Pull requests
 
 - One change per pull request, with a test when the change is testable.
-- Say what you tried on a Mac with Claude Code, and which version. If you could only test in the demo, say so.
+- Say what you tried, on which system (macOS or Linux), with which Claude Code version. If you could only test in the demo, say so.
 - Keep the README's language: short sentences, no claims about things you did not check.
 
 ## Reporting a problem
 
-`node bin/kroog.js doctor` prints what Kroog can see; paste it into the issue (it shows paths on your Mac, so read it first). Say what you did, what you expected, and what happened.
+`node bin/kroog.js doctor` prints what Kroog can see; paste it into the issue (it shows your paths, so read it first). Say what you did, what you expected, and what happened.

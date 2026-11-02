@@ -1,4 +1,4 @@
-// Kroog browser app. Plain JavaScript modules, no build step. Talks only to the Kroog server on this Mac.
+// Kroog browser app. Plain JavaScript modules, no build step. Talks only to the Kroog server on this computer.
 import {
   $, $$, esc, trim, clipText, words, lowerFirst, plural, EDITORS, NOTE_TYPES,
   dur, clock, dayish, countdownText, edName, editorUrl, bucket, look, whenText, lineText, firstLine,
@@ -37,7 +37,7 @@ const background = () => {
   if (b) return b;
   return store.get('kroog-water', '') === 'off' ? 'none' : 'pixels';
 };
-// Kroog can run chats itself when it found Claude Code on this Mac.
+// Kroog can run chats itself when it found Claude Code on this computer.
 const canRun = () => Boolean(S.info.claude && S.info.claude.found);
 const aiOn = () => Boolean(S.info.ai && S.info.ai.provider && S.info.ai.provider !== 'off');
 const kroogRunning = (s) => Boolean(s.kroogRunning);
@@ -99,7 +99,7 @@ function openUrl(url) {
   window.location.href = url;
 }
 
-// Open a chat in the editor (a new one, or an existing one by id). Kroog opens it from the Mac
+// Open a chat in the editor (a new one, or an existing one by id). Kroog opens it from this computer
 // itself when it can, so the browser never asks about vscode:// links; with a folder, that
 // window opens first.
 async function openInEditor({ editor, cwd, session, prompt } = {}) {
@@ -1191,21 +1191,21 @@ function renderSetup() {
     ? 'In the demo, summaries are made from the chat text, with no model.'
     : ai.provider === 'claude' ? `Each call is one short Haiku request through Claude Code. It counts toward your plan's usage like any Claude Code chat, and takes about 3 seconds. ${ai.usedToday || 0} of ${ai.limit || 200} used today.`
     : ai.provider === 'api' ? `Each call costs well under a cent on your API key. ${ai.usedToday || 0} of ${ai.limit || 200} used today.`
-    : ai.provider === 'ollama' ? `Runs on this Mac only, free. Needs Ollama running with the model pulled (ollama pull ${st.ollamaModel || 'llama3.2'}). ${ai.usedToday || 0} of ${ai.limit || 200} used today.`
+    : ai.provider === 'ollama' ? `Runs on this computer only, free. Needs Ollama running with the model pulled (ollama pull ${st.ollamaModel || 'llama3.2'}). ${ai.usedToday || 0} of ${ai.limit || 200} used today.`
     : 'Off. Kroog still works; chats just have no summaries, and briefs are put together without AI.';
 
   $('#view').innerHTML = `${demoLine()}<div class="page">
-    <header class="page-head"><div><h1>Setup</h1><p class="lead">Kroog runs on this Mac only. It reads your Claude Code chats and never changes your code.</p></div></header>
+    <header class="page-head"><div><h1>Setup</h1><p class="lead">Kroog runs on this computer only. It reads your Claude Code chats and never changes your code.</p></div></header>
     <div class="setup">
       <section class="set"><h2>Claude Code ${state}</h2><div class="body">
-        <p>Kroog adds a few hooks to <code>${esc(tildePath(link.settingsPath || '~/.claude/settings.json'))}</code>. Every Claude Code chat on this Mac reads that file, including the VS Code and Cursor panels, so no plugin is needed. Kroog saves a backup first.</p>
+        <p>Kroog adds a few hooks to <code>${esc(tildePath(link.settingsPath || '~/.claude/settings.json'))}</code>. Every Claude Code chat on this computer reads that file, including the VS Code and Cursor panels, so no plugin is needed. Kroog saves a backup first.</p>
         ${link.error ? `<p style="color:var(--error)">${esc(link.error)}</p>` : ''}
         ${demo ? '<p>The demo never touches your settings. Quit it and run <code>node bin/kroog.js link</code>.</p>' : `<div class="tools" style="margin:0"><button type="button" class="btn solid" id="do-link">${link.linked ? 'link again' : 'link now'}</button>${link.linked || link.partial ? '<button type="button" class="btn warn" id="do-unlink">unlink</button>' : ''}</div>`}
         <p class="quiet">${info.claude && info.claude.registry ? `Claude Code reports ${plural(info.claude.open || 0, 'open chat')} right now. Chats that are open show up here at once; what they do arrives through the hooks.` : 'After linking, chats show up once they do something.'}</p>
         <ul class="events">${events.map((e) => `<li class="${lastEvents[e] ? 'yes' : ''}">${e}<span>${lastEvents[e] ? (dur(lastEvents[e]) === 'just now' ? 'just now' : `${dur(lastEvents[e])} ago`) : 'not yet'}</span></li>`).join('')}</ul>
       </div></section>
 
-      <section class="set"><h2>Claude Code on this Mac ${claudeState}</h2><div class="body">
+      <section class="set"><h2>Claude Code on this computer ${claudeState}</h2><div class="body">
         <p>Kroog uses Claude Code itself for the AI helper only (summaries, notes and merged briefs, with Haiku on your plan). Your chats always run in VS Code or Cursor; Kroog opens them there and sends context into them.</p>
         ${demo ? '<p class="quiet">In the demo, the helper is pretend.</p>' : cl.found
           ? `<p class="quiet">Using <code>${esc(tildePath(cl.path))}</code>${cl.from === 'vscode' || cl.from === 'cursor' ? ` (the copy inside ${cl.from === 'cursor' ? 'Cursor' : 'VS Code'})` : ''}, version ${esc(cl.version || '')}.</p>`
@@ -1220,9 +1220,9 @@ function renderSetup() {
       <section class="set"><h2>Usage ${modState}</h2><div class="body">
         <p>Kroog's mod is a small Claude Code plugin that sends each chat's plan usage (the 5-hour and weekly windows) and cost to this Kroog, and nothing anywhere else. The <a href="#/burn">burn</a> page and the chip at the top come from it.</p>
         ${demo ? '<p class="quiet">In the demo the readings are made up.</p>' : mod.installed
-          ? `<p class="quiet">Installed (${esc(mod.version || '')}), read from <code>${esc(tildePath(mod.from || ''))}</code>${mod.current === false ? '. That is not this folder; run <code>node bin/kroog.js link</code> to point it here.' : '. It updates with git pull.'}</p>`
+          ? `<p class="quiet">Installed (${esc(mod.version || '')}), read from <code>${esc(tildePath(mod.from || ''))}</code>${mod.current === false ? '. That is not this folder; run <code>node bin/kroog.js link</code> to point it here.' : mod.current ? '. It updates with git pull.' : ''}</p>`
           : `<p>${esc(mod.reason || 'The mod is not installed.')}</p><div class="tools" style="margin:0"><button type="button" class="btn solid" id="mod-install">install the mod</button><button type="button" class="btn soft" id="mod-check">check again</button></div>
-             <p class="quiet">Or, in a chat: <code>${esc(info.modLine || '')}</code>. Chats started after that send their usage.</p>`}
+             <p class="quiet">Or, in the Terminal: <code>${esc(info.modLine || '')}</code>. Chats started after that send their usage.</p>`}
         <p class="quiet">Cost per chat on the burn page is Claude Code's own figure, which it writes into each chat's transcript (or the mod reports). Where a chat has none, Kroog prices the transcript itself at list price, in dollars per million tokens as of ${esc(info.pricesAsOf || '')}: ${esc(pricesText(info.prices))}. To change them, add a <code>prices</code> table to <code>${esc(tildePath((info.paths || {}).home || '~/.kroog'))}/settings.json</code>.</p>
       </div></section>
 
@@ -1237,7 +1237,7 @@ function renderSetup() {
       </div></section>
 
       <section class="set"><h2>Older chats</h2><div class="body">
-        <p>Kroog only hears from a chat once it does something. To see chats you used before linking, import them from Claude Code's own history on this Mac. Kroog reads it and changes nothing. Imported chats show their title, project, plan, files and last reply, and come alive again when you use them.</p>
+        <p>Kroog only hears from a chat once it does something. To see chats you used before linking, import them from Claude Code's own history on this computer. Kroog reads it and changes nothing. Imported chats show their title, project, plan, files and last reply, and come alive again when you use them.</p>
         ${demo ? '<p class="quiet">The demo has fake chats only.</p>' : `<div class="tools" style="margin:0;flex-wrap:nowrap;align-items:center"><select id="import-days" aria-label="How far back" style="width:auto">${[[1, 'last day'], [3, 'last 3 days'], [7, 'last 7 days'], [14, 'last 14 days']].map(([v, l]) => `<option value="${v}" ${v === (UI.importDays || 7) ? 'selected' : ''}>${l}</option>`).join('')}</select><button type="button" class="btn solid" id="do-import">import recent chats</button></div>`}
         <p class="quiet">Kroog also does this each time it starts, for the last 7 days.</p>
       </div></section>
@@ -1258,7 +1258,7 @@ function renderSetup() {
         ${demo ? '<p class="quiet">Notes are off in the demo.</p>' : `
         <form class="keyrow" id="key-form" autocomplete="off"><label for="set-key" class="sr">Anthropic API key</label><input type="password" id="set-key" placeholder="${info.apiKey ? 'saved; paste a new key to replace it' : 'sk-ant-...'}" autocomplete="off"><button type="submit" class="btn solid">save key</button>${info.apiKey ? '<button type="button" class="btn warn" id="del-key">remove</button>' : ''}</form>
         <label class="check"><input type="checkbox" id="set-notes" ${st.notesEnabled !== false ? 'checked' : ''}><span>write notes when a chat finishes a turn</span></label>`}
-        <p class="quiet">The key is saved only in <code>~/.kroog/.env</code> on this Mac, never in your shell, so your chats keep using your Claude plan. Make it in its own Console workspace with a monthly spend limit.</p>
+        <p class="quiet">The key is saved only in <code>~/.kroog/.env</code> on this computer, never in your shell, so your chats keep using your Claude plan. Make it in its own Console workspace with a monthly spend limit.</p>
       </div></section>
 
       <section class="set"><h2>Alerts</h2><div class="body">
@@ -1268,16 +1268,16 @@ function renderSetup() {
       </div></section>
 
       <section class="set"><h2>Look</h2><div class="body">
-        <div class="seg" role="group" aria-label="Theme">${[['system', 'match my Mac'], ['light', 'light'], ['dark', 'dark']].map(([k, l]) => `<button type="button" data-theme-choice="${k}" aria-pressed="${theme === k}">${l}</button>`).join('')}</div>
+        <div class="seg" role="group" aria-label="Theme">${[['system', 'match my system'], ['light', 'light'], ['dark', 'dark']].map(([k, l]) => `<button type="button" data-theme-choice="${k}" aria-pressed="${theme === k}">${l}</button>`).join('')}</div>
         <div class="field"><label for="set-bg">Behind the week view</label><select id="set-bg">${BACKGROUNDS.map(([k, l]) => `<option value="${k}" ${background() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <p class="quiet">In the activity field, every step a working chat takes drops a run of cells under it (teal for a tool, hollow for an agent, amber when it asked you, red when it failed); chats that need you breathe amber. Everything behind the chats stands still if your Mac is set to reduce motion.</p>
+        <p class="quiet">In the activity field, every step a working chat takes drops a run of cells under it (teal for a tool, hollow for an agent, amber when it asked you, red when it failed); chats that need you breathe amber. Everything behind the chats stands still if your computer is set to reduce motion.</p>
       </div></section>
 
       <section class="set"><h2>Where things live</h2><div class="body">
         <p>Kroog's files: <code>${esc(tildePath((info.paths || {}).home || '~/.kroog'))}</code></p>
         <p>Claude Code settings: <code>${esc(tildePath((info.paths || {}).settings || '~/.claude/settings.json'))}</code></p>
-        <p>This page: <code>http://127.0.0.1:${esc(info.port || 4877)}</code>, on this Mac only. Version ${esc(info.version || '')}.</p>
-        <p class="quiet">Your chats stay on this Mac. The only thing Kroog sends anywhere is a note request to the Claude API, when you have added a key.</p>
+        <p>This page: <code>http://127.0.0.1:${esc(info.port || 4877)}</code>, on this computer only. Version ${esc(info.version || '')}.</p>
+        <p class="quiet">Your chats stay on this computer. Kroog itself only talks to the Claude API when you add your own key; the AI helper otherwise works through Claude Code, like any chat. No telemetry.</p>
       </div></section>
     </div>
   </div>`;

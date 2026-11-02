@@ -1,4 +1,4 @@
-// The clipboard on this Mac. Kroog runs here, so it can put the context for a new chat on
+// The clipboard on this computer. Kroog runs here, so it can put the context for a new chat on
 // the clipboard itself, which is the one thing that always works: you paste, press Enter.
 import { spawn } from 'node:child_process';
 

@@ -94,7 +94,7 @@ export function startDemo({ engine, store }) {
     place(cost, 110, [100, 48]);
 
     const faq = newId();
-    const siteDir = `${home}/ishanyash-site`;
+    const siteDir = `${home}/my-site`;
     await h('SessionStart', faq, siteDir, 'cursor', { source: 'startup' });
     await h('UserPromptSubmit', faq, siteDir, 'cursor', { prompt: 'Draft the coaching FAQ using only facts already on the site.' });
     await h('PreToolUse', faq, siteDir, 'cursor', { tool_name: 'Write', tool_input: { file_path: `${siteDir}/content/coaching.md` }, tool_use_id: 'seed-faq' });
@@ -190,7 +190,7 @@ export function startDemo({ engine, store }) {
   // A long-running chat with a helper, a failing test, and room for your messages.
   async function branchSearch() {
     const sid = newId();
-    const cwd = `${home}/neurobuttr-mcp`;
+    const cwd = `${home}/git-mcp`;
     await h('SessionStart', sid, cwd, 'vscode', { source: 'startup' });
     await sleep(500);
     await h('UserPromptSubmit', sid, cwd, 'vscode', { prompt: 'Add a search tool that finds branches by keyword. Add tests.' });
@@ -241,7 +241,7 @@ export function startDemo({ engine, store }) {
   // Keeps working so you can send it a message and watch it arrive after a step.
   async function post() {
     const sid = newId();
-    const cwd = `${home}/ishanyash-site`;
+    const cwd = `${home}/my-site`;
     await h('SessionStart', sid, cwd, 'vscode', { source: 'startup' });
     await h('UserPromptSubmit', sid, cwd, 'vscode', { prompt: "Draft this week's post: Power BI in UK analyst ads. Use the house style." });
     const sections = ['the opening', 'section 2 of 4', 'section 3 of 4', 'section 4 of 4', 'the summary'];

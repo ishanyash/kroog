@@ -109,7 +109,7 @@ export async function doctor({ version = '' } = {}) {
   // 6. The mod that sends plan usage, and the last reading it sent.
   const mod = await modStatus({ claudePath: settings.claudePath || '' });
   if (mod.installed) ok(`The Kroog mod is installed (${mod.version}), so chats send their plan usage`, mod.from);
-  else bad('The Kroog mod is not installed, so Kroog cannot show plan usage', `Run: node bin/kroog.js link. Or in a chat: ${installLine()}`);
+  else bad('The Kroog mod is not installed, so Kroog cannot show plan usage', `Run: node bin/kroog.js link. Or in the Terminal: ${installLine()}`);
   let lastReading = null;
   try {
     const lines = fs.readFileSync(p.usage, 'utf8').trim().split('\n');
@@ -133,13 +133,13 @@ export function printDoctor(r) {
   console.log(boundaryText(r));
 }
 
-// The boundary Kroog keeps (SECURITY.md), with this Mac's paths filled in.
+// The boundary Kroog keeps (SECURITY.md), with this computer's paths filled in.
 export function boundaryText(r) {
   const c = r.claudeDir;
   const h = r.home;
   return [
     '',
-    'What Kroog touches on this Mac:',
+    'What Kroog touches on this computer:',
     `  reads    ${c}/projects (transcripts, memory), ${c}/sessions, ${c}/settings.json,`,
     `           ${c}/CLAUDE.md, rules, skills, agents, commands, plans; each project's CLAUDE.md and .claude docs; ${h}`,
     `  writes   ${h}; hook entries and the mod in Claude Code's settings (backed up first); the clipboard when you ask`,

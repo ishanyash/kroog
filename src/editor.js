@@ -30,7 +30,7 @@ function isExec(file) {
   try { fs.accessSync(file, fs.constants.X_OK); return fs.statSync(file).isFile(); } catch { return false; }
 }
 
-// The editor's command on this Mac, if it is installed: on the PATH, in the usual places,
+// The editor's command on this computer, if it is installed: on the PATH, in the usual places,
 // or inside the app itself (VS Code: "Shell Command: Install 'code' command in PATH" is
 // not needed for that).
 export function findEditorCommand(editor, { env = process.env, home = os.homedir() } = {}) {
@@ -66,7 +66,7 @@ function spawnQuiet(cmd, args) {
 }
 
 export class EditorOpener {
-  // `open` opens a URL on this Mac; `find` finds an editor's command (both swappable for tests).
+  // `open` opens a URL on this computer; `find` finds an editor's command (both swappable for tests).
   constructor({ open, find = findEditorCommand, demo = false } = {}) {
     this.demo = demo;
     this.find = find;

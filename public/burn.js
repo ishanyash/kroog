@@ -153,7 +153,7 @@ function reportHtml(S, r) {
     <div class="acts"><button type="button" class="btn soft" id="burn-again">read again</button></div></header>
   ${!haveWindows ? `<section class="burn-empty">
       <p>${mod.installed ? 'No reading yet. A chat sends one after its first reply; open chats start sending after a restart or /reload-plugins. Windows appear only on a claude.ai plan (Pro or Max).' : 'Kroog needs its mod in Claude Code to read the plan\'s windows. It is one line, and it only ever talks to this Kroog.'}</p>
-      ${mod.installed || mod.demo ? '' : `<div class="row"><button type="button" class="btn solid" id="mod-install">install the mod</button><span class="quiet">or, in a chat: <code>${esc(S.info.modLine || '')}</code></span></div>`}
+      ${mod.installed || mod.demo ? '' : `<div class="row"><button type="button" class="btn solid" id="mod-install">install the mod</button><span class="quiet">or, in the Terminal: <code>${esc(S.info.modLine || '')}</code></span></div>`}
     </section>` : ''}
   <section class="wins">${windowHtml('five_hour', fh)}${windowHtml('seven_day', sd)}${sl ? windowHtml('spend_limit', sl) : ''}</section>
   ${sd ? paceChartHtml('seven_day', sd, (r.history || {}).seven_day || []) : fh ? paceChartHtml('five_hour', fh, (r.history || {}).five_hour || []) : ''}

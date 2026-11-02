@@ -1,4 +1,4 @@
-// Finds and runs Claude Code's own command line on this Mac, signed in with your usual
+// Finds and runs Claude Code's own command line on this computer, signed in with your usual
 // Claude Code login (your subscription). Kroog uses it two ways:
 //   - to run chats itself (new chats, continuing a chat, branching a chat), and
 //   - for small model calls (summaries, briefs, notes) with Haiku, hooks off and no tools.

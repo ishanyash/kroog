@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Kroog (working name): a local board for the Claude Code chats in your editor.
-//   node bin/kroog.js demo     try it with fake chats (changes nothing on your Mac)
+//   node bin/kroog.js demo     try it with fake chats (changes nothing on your computer)
 //   node bin/kroog.js link     connect Claude Code to Kroog (adds hooks to ~/.claude/settings.json)
 //   node bin/kroog.js start    run Kroog for your real chats
 //   node bin/kroog.js unlink   remove Kroog's hooks again
@@ -32,7 +32,7 @@ import { EditorOpener } from '../src/editor.js';
 import { Usage } from '../src/usage.js';
 import { CostBook, PRICES_AS_OF } from '../src/cost.js';
 import { burnReport } from '../src/burn.js';
-import { modStatus, installMod, uninstallMod, installLine } from '../src/mod.js';
+import { modStatus, installMod, uninstallMod, installLine, isClone } from '../src/mod.js';
 import { AiHelper } from '../src/ai.js';
 
 const VERSION = '1.4.1';
@@ -201,7 +201,7 @@ async function start({ demo }) {
       const k = String(key || '').trim();
       if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k)) throw new Error('That does not look like an Anthropic API key. It starts with sk-ant-.');
       writeApiKey(k);
-      return { message: 'Saved to ~/.kroog/.env on this Mac only.' };
+      return { message: 'Saved to ~/.kroog/.env on this computer only.' };
     },
     import: async ({ days } = {}) => {
       if (demo) throw new Error('Demo mode shows fake chats only. Run node bin/kroog.js start to import your real chats.');
@@ -250,7 +250,7 @@ async function start({ demo }) {
     },
     'claude-check': async () => {
       const st = await runner.detect();
-      return { message: st.found ? `Found Claude Code ${st.version}.` : 'Kroog could not find Claude Code on this Mac.' };
+      return { message: st.found ? `Found Claude Code ${st.version}.` : 'Kroog could not find Claude Code on this computer.' };
     },
     // The mod for plan usage: install it from this folder, or see whether it is there.
     'mod-install': async () => {
@@ -297,7 +297,7 @@ async function start({ demo }) {
     },
     'brain-connect': async () => {
       await detecting;
-      if (!runner.available()) throw new Error('Kroog could not find Claude Code on this Mac. See setup.');
+      if (!runner.available()) throw new Error('Kroog could not find Claude Code on this computer. See setup.');
       const bin = runner.cli.path;
       const script = fileURLToPath(import.meta.url);
       const run = (args) => new Promise((resolve) => execFile(bin, args, { env: cleanEnv(), timeout: 30000 }, (error, stdout, stderr) => resolve({ error, out: `${stdout}${stderr}` })));
@@ -305,7 +305,7 @@ async function start({ demo }) {
       const r = await run(mcpAddArgs(process.execPath, script));
       if (r.error) throw new Error(`Claude Code said: ${r.out.trim().slice(0, 200) || r.error.message}`);
       brainConnected = true;
-      return { message: 'Connected. New Claude Code chats can now search your brain (the kroog-brain tool).' };
+      return { message: `Connected. New Claude Code chats can now search your brain (the kroog-brain tool).${isClone() ? '' : ' This copy of Kroog is a temporary one (from npx), so the tool will stop working when npx clears it. Install Kroog with git clone to keep it.'}` };
     },
     'apikey-remove': async () => {
       removeApiKey();
@@ -345,7 +345,7 @@ async function start({ demo }) {
     console.log(demo ? `Kroog demo is running at ${url}` : `Kroog is running at ${url}`);
     console.log('Keep this window open. Press Ctrl+C to stop.');
     if (demo) {
-      console.log('These are fake chats. Nothing on your Mac or in Claude Code is touched.');
+      console.log('These are fake chats. Nothing on your computer or in Claude Code is touched.');
     } else {
       const status = linkStatus();
       if (!status.linked) console.log('Not linked to Claude Code yet. Run: node bin/kroog.js link (or use the Setup page).');
@@ -550,6 +550,11 @@ try {
       break;
     case 'link': {
       checkNode();
+      if (process.platform === 'win32') {
+        console.error('Kroog links to Claude Code through a shell script, so it needs macOS or Linux. On Windows, run it inside WSL. `node bin/kroog.js demo` works anywhere.');
+        process.exitCode = 1;
+        break;
+      }
       const settings = loadSettings();
       const port = Number(option('port') || settings.port || DEFAULT_SETTINGS.port);
       if (port !== settings.port) saveSettings({ ...settings, port });
@@ -557,7 +562,7 @@ try {
       // The mod, for plan usage. Best effort: Setup has the line to paste if this fails.
       if (!flag('no-mod')) {
         const m = await installMod({ claudePath: settings.claudePath || '', port });
-        console.log(m.ok ? m.message : `The Kroog mod was not installed (${m.error}). In a chat, run: ${installLine()}`);
+        console.log(m.ok ? m.message : `The Kroog mod was not installed (${m.error}). In the Terminal, run: ${installLine()}`);
       }
       break;
     }
@@ -588,7 +593,7 @@ try {
         break;
       }
       writeApiKey(key.trim());
-      console.log('Saved to ~/.kroog/.env on this Mac only. It is never added to your shell.');
+      console.log('Saved to ~/.kroog/.env on this computer only. It is never added to your shell.');
       break;
     }
     default:

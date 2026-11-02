@@ -1,6 +1,7 @@
 // Kroog's mod (a Claude Code plugin, in `mod/`): it sends the plan's usage windows and each
-// chat's cost to Kroog. Installing it is one Claude Code command, run here on `link`, which
-// reads the mod from this folder (so `git pull` updates it) at the user scope.
+// chat's cost to Kroog. Installing it is one Claude Code command, run here on `link`, at the
+// user scope. From a git clone it reads the mod from this folder, so `git pull` updates it;
+// from anywhere else (npx, a global npm install) it installs from the GitHub repository.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +9,15 @@ import { execFile } from 'node:child_process';
 import { findClaude, cleanEnv } from './claude-cli.js';
 
 export const MOD_NAME = 'kroog';
+export const REMOTE = 'ishanyash/kroog';
 
 export function repoRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+}
+
+// A git clone keeps its path and updates with git pull; a copy from npx does neither.
+export function isClone(root = repoRoot()) {
+  return fs.existsSync(path.join(root, '.git'));
 }
 
 function run(bin, args, { timeoutMs = 60000 } = {}) {
@@ -32,19 +39,24 @@ export async function modStatus({ claudePath = '' } = {}) {
   const items = Array.isArray(list) ? list : Array.isArray(list && list.plugins) ? list.plugins : [];
   const mine = items.find((p) => String(p.id || '').startsWith(`${MOD_NAME}@`));
   if (!mine) return { installed: false, reason: 'The mod is not installed.' };
-  return { installed: true, version: mine.folderVersion || mine.version || '', from: mine.readFromFolder || mine.installPath || '', enabled: mine.enabled !== false, current: path.resolve(mine.readFromFolder || '') === path.join(repoRoot(), 'mod') };
+  const folder = mine.readFromFolder || '';
+  // "current": installed from this clone's folder. Unknown (null) for an install from GitHub.
+  const current = folder ? path.resolve(folder) === path.join(repoRoot(), 'mod') : null;
+  return { installed: true, version: mine.folderVersion || mine.version || '', from: folder || mine.installPath || '', enabled: mine.enabled !== false, current };
 }
 
 // Installs (or re-installs) the mod from this folder, with the port Kroog runs on.
-export async function installMod({ claudePath = '', port = 4877 } = {}) {
+export async function installMod({ claudePath = '', port = 4877, source = '' } = {}) {
   const cli = findClaude(claudePath);
-  if (!cli) return { ok: false, error: 'Claude Code was not found, so the mod could not be installed. Install it for the Terminal, or run the line from Setup in a chat.' };
+  if (!cli) return { ok: false, error: 'Claude Code was not found, so the mod could not be installed. Install it for the Terminal, or run the line from Setup.' };
   const root = repoRoot();
-  if (!fs.existsSync(path.join(root, '.claude-plugin', 'marketplace.json'))) return { ok: false, error: `No marketplace file in ${root}.` };
-  const r = await run(cli.path, ['plugin', 'install', MOD_NAME, '--marketplace', root, '--scope', 'user', '--config', `port=${port}`, '--json'], { timeoutMs: 120000 });
+  const from = source || (isClone(root) ? root : REMOTE);
+  if (from === root && !fs.existsSync(path.join(root, '.claude-plugin', 'marketplace.json'))) return { ok: false, error: `No marketplace file in ${root}.` };
+  const r = await run(cli.path, ['plugin', 'install', MOD_NAME, '--marketplace', from, '--scope', 'user', '--config', `port=${port}`, '--json'], { timeoutMs: 120000 });
   let out = null;
   try { out = JSON.parse(r.stdout.trim().split('\n').pop() || 'null'); } catch { out = null; }
-  if (out && out.outcome === 'ok') return { ok: true, message: `The Kroog mod is installed from ${root}/mod. Chats started from now on send their usage; open chats do after a restart or /reload-plugins.` };
+  const where = from === root ? `${root}/mod` : `github.com/${from}`;
+  if (out && out.outcome === 'ok') return { ok: true, message: `The Kroog mod is installed from ${where}. Chats started from now on send their usage; open chats do after a restart or /reload-plugins.` };
   return { ok: false, error: (out && out.message) || (r.stderr || r.error || r.stdout).trim().slice(0, 300) || 'The install did not finish.' };
 }
 
@@ -56,7 +68,12 @@ export async function uninstallMod({ claudePath = '' } = {}) {
   return r.ok ? { ok: true } : { ok: false, error: (r.stderr || r.error).trim().slice(0, 200) };
 }
 
-// The line to paste into a chat when the install above cannot run.
-export function installLine({ remote = 'ishanyash/kroog' } = {}) {
-  return `/plugin install ${MOD_NAME} --marketplace ${remote}`;
+// The line to run in the Terminal when the install above cannot run.
+export function installLine({ remote = REMOTE } = {}) {
+  return `claude plugin install ${MOD_NAME} --marketplace ${remote}`;
+}
+
+// The same from inside a chat: add the marketplace, then install from it.
+export function chatInstallLines({ remote = REMOTE } = {}) {
+  return [`/plugin marketplace add ${remote}`, `/plugin install ${MOD_NAME}@${MOD_NAME}`];
 }
