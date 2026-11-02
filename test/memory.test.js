@@ -170,3 +170,19 @@ test('the Ollama client finds a pulled model and uses EmbeddingGemma prefixes', 
   }
   await assert.rejects(new OllamaEmbedder({ url: 'http://127.0.0.1:9' }).ready());
 });
+
+test('each kind lists its own latest files, notes included, even when other kinds changed more recently', async () => {
+  const claudeDir = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'demo-brain');
+  const notes = [{ id: 'n1', text: 'Runs over $5 stop before they start.', type: 'Decision', project: 'dbt-cost', t: 1 }];
+  const brain = new SecondBrain({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-brain-kinds-')), claudeDir, embedder: null, getNotes: () => notes, getProjects: () => [] });
+  await brain.build();
+  const counts = Object.fromEntries((brain.status().sources || []).map((x) => [x.kind, x.count]));
+  assert.ok(Object.keys(counts).length >= 4, `kinds counted: ${Object.keys(counts).join(', ')}`);
+  for (const [kind, n] of Object.entries(counts)) {
+    const listed = brain.recent(20, kind);
+    assert.equal(listed.length, Math.min(n, 20), `${kind}: ${n} indexed, ${listed.length} listed`);
+    assert.ok(listed.every((r) => r.kind === kind));
+  }
+  assert.equal(brain.recent(20, 'note').length, 1, 'notes are listed when asked for');
+  assert.ok(brain.recent(20).every((r) => r.kind !== 'note'), 'and left out of the mixed list');
+});

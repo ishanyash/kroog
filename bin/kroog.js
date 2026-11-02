@@ -269,7 +269,7 @@ async function start({ demo }) {
       return { text };
     },
     'brain-search': async ({ query = '', kinds = null, project } = {}) => ({ results: await brain.search(String(query).slice(0, 500), { kinds: Array.isArray(kinds) ? kinds : null, project }) }),
-    'brain-recent': async () => ({ results: brain.recent(10) }),
+    'brain-recent': async ({ kind = null } = {}) => ({ results: brain.recent(kind ? 20 : 10, typeof kind === 'string' ? kind : null) }),
     // Answers at once with the groups as they are; a fresh set, if the chats changed, comes
     // through the stream when it is ready (the AI helper can take a few seconds).
     groups: async ({ force } = {}) => {

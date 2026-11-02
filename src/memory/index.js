@@ -345,10 +345,11 @@ export class SecondBrain {
     return results;
   }
 
-  // The latest files, newest first, shaped like search results.
-  recent(limit = 10) {
+  // The latest files, newest first, shaped like search results. With a kind, only that
+  // kind (Kroog notes are left out of the mixed list, but listed when asked for).
+  recent(limit = 10, kind = null) {
     return Object.entries(this.meta.files)
-      .filter(([p]) => !p.startsWith(NOTE_PREFIX))
+      .filter(([p, f]) => (kind ? f.kind === kind : !p.startsWith(NOTE_PREFIX)))
       .sort((a, b) => b[1].mtime - a[1].mtime)
       .slice(0, limit)
       .map(([p, f]) => {

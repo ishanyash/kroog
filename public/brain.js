@@ -111,9 +111,10 @@ function listHtml(esc) {
   if (items == null) return `<p class="quiet">${searching ? 'Searching' : 'Loading'}<span class="dots"></span></p>`;
   const shown = B.kind === 'all' ? items : items.filter((r) => r.kind === B.kind);
   if (!shown.length) {
-    return `<div class="empty"><p>${searching ? `Nothing matches "${esc(B.query.trim())}"${B.kind === 'all' ? '' : ` in ${esc(KIND_LABEL[B.kind] || B.kind)}`}.` : 'Nothing indexed yet. Kroog reads your ~/.claude folder and the projects of your chats.'}</p></div>`;
+    const what = B.kind === 'all' ? '' : ` in ${esc(KIND_LABEL[B.kind] || B.kind)}`;
+    return `<div class="empty"><p>${searching ? `Nothing matches "${esc(B.query.trim())}"${what}.` : B.kind === 'all' ? 'Nothing indexed yet. Kroog reads your ~/.claude folder and the projects of your chats.' : `Nothing${what} yet.`}</p></div>`;
   }
-  if (!searching) return `<div class="section-head"><h2>Recently changed</h2><span class="n">${shown.length}</span></div><ul class="brain-hits">${shown.map((r) => resultHtml(r, esc)).join('')}</ul>`;
+  if (!searching) return `<div class="section-head"><h2>Recently changed${B.kind === 'all' ? '' : `: ${esc(KIND_LABEL[B.kind] || B.kind)}`}</h2><span class="n">${shown.length}</span></div><ul class="brain-hits">${shown.map((r) => resultHtml(r, esc)).join('')}</ul>`;
   const kinds = [...new Set(shown.map((r) => r.kind))];
   return kinds.map((k) => {
     const rs = shown.filter((r) => r.kind === k);
@@ -179,9 +180,12 @@ async function runSearch() {
   syncMapQuery();
 }
 
+// The latest files, of the kind picked above the list (all kinds by default).
 async function loadRecent() {
+  const kind = B.kind;
   try {
-    const r = await API.post('brain-recent', {});
+    const r = await API.post('brain-recent', kind === 'all' ? {} : { kind });
+    if (kind !== B.kind) return;
     B.recent = r.results || [];
   } catch {
     B.recent = [];
@@ -347,7 +351,8 @@ function bind(view) {
     if (d.brainKind) {
       B.kind = d.brainKind;
       for (const p of view.querySelectorAll('[data-brain-kind]')) p.setAttribute('aria-pressed', String(p.dataset.brainKind === B.kind));
-      if (B.query.trim()) runSearch(); else paint();
+      if (B.query.trim()) runSearch();
+      else { B.recent = null; paint(); loadRecent(); }
       return;
     }
     const item = (id) => allItems().find((r) => r.id === id);
