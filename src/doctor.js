@@ -73,7 +73,8 @@ export async function doctor({ version = '' } = {}) {
   if (cliVersion) ok(`Claude Code ${cliVersion} found for running chats`, cli.path);
   else bad('Claude Code was not found, so Kroog can\'t start chats or use Haiku', 'Install it (code.claude.com) or set its path in Setup');
   const exts = editorExtensions();
-  if (!exts.length) bad('No Claude Code extension found in VS Code or Cursor', 'Install the Claude Code extension in your editor');
+  // Terminal chats work without an editor; the extension is only needed to open chats from Kroog.
+  if (!exts.length) ok('No Claude Code extension in VS Code or Cursor', 'Fine for terminal chats. To open chats from Kroog, install the Claude Code extension in your editor.');
   for (const e of exts) {
     if (cmpVersion(e.version, INBOX_VERSION) >= 0) ok(`${e.editor} has Claude Code ${e.version}, which has chat inboxes`);
     else bad(`${e.editor} has Claude Code ${e.version}, which is too old for messages from Kroog`, `Update the Claude Code extension to ${INBOX_VERSION} or newer`);
