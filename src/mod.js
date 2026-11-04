@@ -1,7 +1,8 @@
 // Kroog's mod (a Claude Code plugin, in `mod/`): it sends the plan's usage windows and each
 // chat's cost to Kroog. Installing it is one Claude Code command, run here on `link`, at the
-// user scope. From a git clone it reads the mod from this folder, so `git pull` updates it;
-// from anywhere else (npx, a global npm install) it installs from the GitHub repository.
+// user scope. From a folder that stays put (a git clone, or an unzipped copy) it reads the
+// mod from this folder, so `git pull` or a new copy updates it; from a copy npm or npx keeps
+// in its own cache, it installs from the GitHub repository instead.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,14 @@ export function repoRoot() {
 // A git clone keeps its path and updates with git pull; a copy from npx does neither.
 export function isClone(root = repoRoot()) {
   return fs.existsSync(path.join(root, '.git'));
+}
+
+// Whether this folder stays where it is: a git clone or an unzipped copy does; npx's cache
+// and npm's node_modules are managed by npm and can move or vanish.
+export function isStableFolder(root = repoRoot()) {
+  if (isClone(root)) return true;
+  const parts = path.resolve(root).split(path.sep);
+  return !parts.includes('_npx') && !parts.includes('node_modules');
 }
 
 function run(bin, args, { timeoutMs = 60000 } = {}) {
@@ -50,7 +59,7 @@ export async function installMod({ claudePath = '', port = 4877, source = '' } =
   const cli = findClaude(claudePath);
   if (!cli) return { ok: false, error: 'Claude Code was not found, so the mod could not be installed. Install it for the Terminal, or run the line from Setup.' };
   const root = repoRoot();
-  const from = source || (isClone(root) ? root : REMOTE);
+  const from = source || (isStableFolder(root) ? root : REMOTE);
   if (from === root && !fs.existsSync(path.join(root, '.claude-plugin', 'marketplace.json'))) return { ok: false, error: `No marketplace file in ${root}.` };
   const r = await run(cli.path, ['plugin', 'install', MOD_NAME, '--marketplace', from, '--scope', 'user', '--config', `port=${port}`, '--json'], { timeoutMs: 120000 });
   let out = null;

@@ -32,7 +32,7 @@ import { EditorOpener } from '../src/editor.js';
 import { Usage } from '../src/usage.js';
 import { CostBook, PRICES_AS_OF } from '../src/cost.js';
 import { burnReport } from '../src/burn.js';
-import { modStatus, installMod, uninstallMod, removeBrainTool, installLine, isClone } from '../src/mod.js';
+import { modStatus, installMod, uninstallMod, removeBrainTool, installLine, isStableFolder } from '../src/mod.js';
 import { AiHelper } from '../src/ai.js';
 
 const VERSION = '1.5.0';
@@ -299,7 +299,7 @@ async function start({ demo }) {
       const r = await run(mcpAddArgs(process.execPath, script));
       if (r.error) throw new Error(`Claude Code said: ${r.out.trim().slice(0, 200) || r.error.message}`);
       brainConnected = true;
-      return { message: `Connected. New Claude Code chats can now search your brain (the kroog-brain tool).${isClone() ? '' : ' This copy of Kroog is a temporary one (from npx), so the tool will stop working when npx clears it. Install Kroog with git clone to keep it.'}` };
+      return { message: `Connected. New Claude Code chats can now search your brain (the kroog-brain tool).${isStableFolder() ? '' : ' This copy of Kroog is a temporary one (from npx), so the tool will stop working when npx clears it. Install Kroog with git clone, or from a zip, to keep it.'}` };
     },
     'apikey-remove': async () => {
       removeApiKey();
