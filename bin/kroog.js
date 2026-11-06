@@ -75,7 +75,7 @@ async function start({ demo }) {
   if (!demo && hasOldCrewHooks()) {
     try {
       const r = link({ port });
-      console.log(`Pointed Claude Code's hooks at the new ~/.kroog/hook.sh (backup: ${r.backupPath}).`);
+      console.log(`Pointed Claude Code's hooks at the new ~/.kroog hook relay (backup: ${r.backupPath}).`);
     } catch (error) {
       console.log(`Could not update the hooks: ${error.message} Run: node bin/kroog.js link`);
     }
@@ -319,13 +319,15 @@ async function start({ demo }) {
         else if (l) console.error(`Port ${port} is used by another program (process ${l.pid}: ${l.command}).`);
         else console.error(`Port ${port} is busy, and Kroog could not see by what.`);
         console.error('To open the one that is running: node bin/kroog.js open');
-        console.error(`To stop it and start this version: node bin/kroog.js stop && node bin/kroog.js start`);
+        console.error('To stop it and start this version: node bin/kroog.js stop, then node bin/kroog.js start');
         console.error('Or run on another port with --port 4878 (then run link again with the same --port).');
         process.exit(1);
       });
       return;
     }
-    console.error(error.message);
+    // Windows keeps some ranges of ports for itself (netsh int ipv4 show excludedportrange).
+    if (error.code === 'EACCES') console.error(`This system does not let programs use port ${port}. Run on another port with --port 4878 (then run link again with the same --port).`);
+    else console.error(error.message);
     process.exit(1);
   });
 
@@ -539,7 +541,7 @@ async function stop() {
   console.log(`Port ${port} is used by another program, so Kroog left it alone:`);
   console.log(`  process ${l.pid}: ${l.command}`);
   console.log(`To stop it anyway: node bin/kroog.js stop --force   (or: kill ${l.pid})`);
-  console.log('Or run Kroog on another port: node bin/kroog.js link --port 4878 && node bin/kroog.js start --port 4878');
+  console.log('Or run Kroog on another port: node bin/kroog.js link --port 4878, then node bin/kroog.js start --port 4878');
 }
 
 function status() {

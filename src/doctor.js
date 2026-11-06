@@ -10,8 +10,11 @@ import { findClaude, claudeVersion } from './claude-cli.js';
 import { Presence } from './presence.js';
 import { modStatus, installLine } from './mod.js';
 
-// Claude Code gives each chat an inbox from this version on.
+// Claude Code gives each chat an inbox from this version on: a socket on macOS and Linux,
+// and a named pipe on Windows from 2.1.234.
 export const INBOX_VERSION = '2.1.224';
+export const WINDOWS_INBOX_VERSION = '2.1.234';
+export const inboxVersion = (platform = process.platform) => (platform === 'win32' ? WINDOWS_INBOX_VERSION : INBOX_VERSION);
 
 export function cmpVersion(a, b) {
   const pa = String(a || '0').split('.').map(Number);
@@ -77,9 +80,11 @@ export async function doctor({ version = '' } = {}) {
   const exts = editorExtensions();
   // Terminal chats work without an editor; the extension is only needed to open chats from Kroog.
   if (!exts.length) ok('No Claude Code extension in VS Code or Cursor', 'Fine for terminal chats. To open chats from Kroog, install the Claude Code extension in your editor.');
+  const need = inboxVersion();
+  if (cliVersion && cmpVersion(cliVersion, need) < 0) bad(`Claude Code ${cliVersion} is too old for messages from Kroog`, `Update Claude Code to ${need} or newer (claude update)`);
   for (const e of exts) {
-    if (cmpVersion(e.version, INBOX_VERSION) >= 0) ok(`${e.editor} has Claude Code ${e.version}, which has chat inboxes`);
-    else bad(`${e.editor} has Claude Code ${e.version}, which is too old for messages from Kroog`, `Update the Claude Code extension to ${INBOX_VERSION} or newer`);
+    if (cmpVersion(e.version, need) >= 0) ok(`${e.editor} has Claude Code ${e.version}, which has chat inboxes`);
+    else bad(`${e.editor} has Claude Code ${e.version}, which is too old for messages from Kroog`, `Update the Claude Code extension to ${need} or newer`);
   }
 
   // 4. Claude Code's registry of open chats.

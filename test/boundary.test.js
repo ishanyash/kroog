@@ -12,7 +12,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 function files(dir, exts) {
   const out = [];
   for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
+    const p = `${dir}/${entry.name}`; // forward slashes on every system, so the checks below read the same
     if (entry.isDirectory()) { if (entry.name !== 'fonts' && entry.name !== 'node_modules') out.push(...files(p, exts)); } else if (exts.some((e) => entry.name.endsWith(e))) out.push(p);
   }
   return out;

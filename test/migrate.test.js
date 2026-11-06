@@ -6,8 +6,10 @@ import path from 'node:path';
 
 test('moving from Crew: the data folder moves and old hooks are replaced', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-home-'));
-  const saved = { HOME: process.env.HOME, KROOG_HOME: process.env.KROOG_HOME, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR };
+  const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, KROOG_HOME: process.env.KROOG_HOME, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR };
+  // The home folder: HOME on macOS and Linux, USERPROFILE on Windows.
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.KROOG_HOME;
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
@@ -27,7 +29,7 @@ test('moving from Crew: the data folder moves and old hooks are replaced', async
     assert.equal(hasOldCrewHooks(), false);
     const settings = JSON.parse(fs.readFileSync(path.join(home, '.claude', 'settings.json'), 'utf8'));
     assert.equal(settings.model, 'opus', 'your other settings stay');
-    assert.ok(JSON.stringify(settings.hooks).includes('/.kroog/hook.sh'));
+    assert.match(JSON.stringify(settings.hooks).replace(/\\\\/g, '/'), /\/\.kroog\/hook\.(sh|mjs)/);
     assert.equal(linkStatus().linked, true);
   } finally {
     for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;

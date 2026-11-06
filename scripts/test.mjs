@@ -1,7 +1,8 @@
 // Runs every test/*.test.js, one file at a time, each in its own Node process. A script, not
 // a shell glob, so it works the same in cmd.exe and PowerShell (which do not expand `*`) as in
 // sh. A file still running after two minutes is stopped, and the watchdog prints what kept it
-// running, so a hang names its cause instead of running for hours.
+// running, so a hang names its cause instead of running for hours. In CI the output is TAP,
+// which prints each failure as it happens.
 //
 //   npm test               every file
 //   npm test -- inbox      only files whose name contains "inbox"
@@ -22,7 +23,7 @@ const failed = [];
 const started = Date.now();
 for (const file of files) {
   console.log(`\n# ${file}`);
-  const r = spawnSync(process.execPath, ['--import', watchdog, '--test-reporter=spec', file], {
+  const r = spawnSync(process.execPath, ['--import', watchdog, `--test-reporter=${process.env.CI ? 'tap' : 'spec'}`, file], {
     cwd: root,
     stdio: 'inherit',
     timeout: 240000,

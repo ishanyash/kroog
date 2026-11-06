@@ -18,16 +18,21 @@ npx github:ishanyash/kroog demo
 
 A tab opens with a week of made-up chats. The demo keeps its data in a temporary folder and changes nothing in Claude Code. Press Ctrl+C to stop it.
 
+On Windows, run it in PowerShell. If PowerShell says running scripts is disabled, type `npx.cmd` instead of `npx`.
+
 ## Install
 
 You need:
 
 | | Version | Check |
 | --- | --- | --- |
-| macOS or Linux | Windows: use WSL. Linux also needs `curl`, `lsof`, and `wl-copy` or `xclip` | |
+| macOS, Linux or Windows | Windows 10 or 11, no WSL needed. Linux also needs `lsof`, and `wl-copy` or `xclip` | |
 | Node.js | 20 or newer | `node -v` |
-| Claude Code | 2.1.224 or newer; 2.1.299 or newer for the plan's usage windows | `claude --version`, or `/status` in a chat |
+| Claude Code | 2.1.224 or newer (2.1.234 on Windows); 2.1.299 or newer for the plan's usage windows | `claude --version`, or `/status` in a chat |
+| Git | any version, to download Kroog and update it | `git --version` |
 | VS Code or Cursor | any recent version, for opening chats from Kroog | optional |
+
+On macOS or Linux, in the Terminal:
 
 ```
 git clone https://github.com/ishanyash/kroog.git ~/kroog
@@ -36,9 +41,20 @@ node bin/kroog.js link      # connect Claude Code to Kroog (backs up ~/.claude/s
 node bin/kroog.js start     # run it; opens its page with its key
 ```
 
+On Windows, in PowerShell (or Windows Terminal):
+
+```
+git clone https://github.com/ishanyash/kroog.git $HOME\kroog
+cd $HOME\kroog
+node bin/kroog.js link
+node bin/kroog.js start
+```
+
+The commands are the same after that on every system. On Windows, `~` below means your user folder, for example `C:\Users\you`.
+
 Keep the window with `start` open while you use Kroog. If you close the tab, `node bin/kroog.js open` brings it back. Each time it starts, Kroog brings in chats from the last 7 days of Claude Code's history (up to 40), so the map is not empty. Chats that were already open start reporting after `/reload-plugins`, or in a new chat.
 
-To update: `cd ~/kroog && git pull`, then `node bin/kroog.js stop` and `start`. To remove: `node bin/kroog.js unlink`, then delete `~/kroog` and `~/.kroog`.
+To update: `cd ~/kroog`, `git pull`, then `node bin/kroog.js stop` and `start`. To remove: `node bin/kroog.js unlink`, then delete `~/kroog` and `~/.kroog`.
 
 Something not working? Run `node bin/kroog.js doctor`. It checks everything Kroog needs and says what to fix.
 
@@ -132,15 +148,16 @@ Add `--port 4878` to `link` and `start` to use another port.
 
 ## How it works
 
-- **Hooks.** `link` adds hooks to Claude Code's settings. Each runs `~/.kroog/hook.sh`, which tells Kroog what a chat is doing. When Kroog is not running, the hook gives up in a moment and changes nothing.
+- **Hooks.** `link` adds hooks to Claude Code's settings. Each runs a small relay that tells Kroog what a chat is doing: `~/.kroog/hook.sh` (sh and curl) on macOS and Linux, `~/.kroog/hook.mjs` (Node) on Windows, where it works in Git Bash and in PowerShell. When Kroog is not running, the hook gives up in a moment and changes nothing.
 - **The registry.** Claude Code keeps a list of its running chats in `~/.claude/sessions/`. Kroog reads it, so it knows which chats are open from the moment it starts.
-- **Inboxes.** Every Claude Code chat has a private inbox, a socket only your user can reach. Kroog sends context there; that is also how a brand-new chat gets its first message.
+- **Inboxes.** Every Claude Code chat has a private inbox: a socket only your user can reach on macOS and Linux, a named pipe on Windows. Kroog sends context there; that is also how a brand-new chat gets its first message.
 - **Transcripts.** A chat's conversation and its cost come from Claude Code's own files in `~/.claude/projects/`. Kroog reads them and never changes them.
 - **The mod.** A Claude Code plugin that reports the plan's usage windows, using Claude Code's plugin API.
 
 ## Limits
 
-- Built on macOS with VS Code. On Linux, the map, the terminal chats, the burn page and context into open and new chats have been tested with real Claude Code; opening chats in VS Code on Linux has not. Windows needs WSL.
+- Built on macOS with VS Code. On Linux, the map, the terminal chats, the burn page and context into open and new chats have been tested with real Claude Code; opening chats in VS Code on Linux has not.
+- On Windows, every change is tested on GitHub's Windows machines: `link`, the hooks run the way Claude Code runs them (in Git Bash and in PowerShell), the map, the mod installed through Claude Code, `stop` and `unlink`. Sending context into a chat's inbox and opening chats in VS Code on Windows have not been tried with a real chat yet. If something does not work, `node bin/kroog.js doctor` says what, and an issue helps.
 - Opening a chat from Kroog works best in VS Code; Cursor chats show up, but opening them from Kroog is less tested.
 - Claude Code's registry, inbox, hooks and transcript format are partly internal and can change between versions. When something changes, Kroog falls back (for example to the clipboard) and says so.
 - Plan windows need a Pro or Max plan and Claude Code 2.1.299 or newer.

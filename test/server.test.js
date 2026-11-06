@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -20,11 +21,18 @@ async function startDemo(env, port) {
   return { child, out: () => out };
 }
 
+// A free port, picked by the system: Windows reserves whole ranges of high ports.
+const freePort = () => new Promise((resolve, reject) => {
+  const s = net.createServer();
+  s.on('error', reject);
+  s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+});
+
 const get = (port, p, headers = {}) => fetch(`http://127.0.0.1:${port}${p}`, { headers, redirect: 'manual' });
 
 test('the page and the API need Kroog\'s key; the hook endpoints keep their own token', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-key-'));
-  const port = 49000 + Math.floor(Math.random() * 900);
+  const port = await freePort();
   const { child, out } = await startDemo({ KROOG_HOME: home }, port);
   try {
     assert.match(out(), /Open it with its key: http:\/\/127\.0\.0\.1:\d+\/\?k=/);
@@ -74,7 +82,7 @@ test('the page and the API need Kroog\'s key; the hook endpoints keep their own 
 
 test('the demo keeps its data in a temporary folder, never in ~/.kroog', async () => {
   const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-fakehome-'));
-  const port = 49000 + Math.floor(Math.random() * 900);
+  const port = await freePort();
   const clean = { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome };
   delete clean.KROOG_HOME;
   const child = spawn(process.execPath, [path.join(root, 'bin/kroog.js'), 'demo', '--port', String(port), '--no-open'], { env: clean, stdio: ['ignore', 'pipe', 'pipe'] });

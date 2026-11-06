@@ -8,6 +8,7 @@ import { Store } from '../src/store.js';
 import { Engine } from '../src/engine.js';
 import { Presence } from '../src/presence.js';
 import { isJunkTitle, retitle, isEmptyChat } from '../src/titles.js';
+import { forgetPipes } from '../src/platform.js';
 
 // A chat's inbox address for tests: a socket file on macOS and Linux, a named pipe on Windows.
 const endpoint = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\kroog-test-${process.pid}-${name}-${Math.random().toString(36).slice(2, 8)}` : path.join(dir, `${name}.sock`));
@@ -51,6 +52,7 @@ test('Claude Code\'s registry tells Kroog which chats are open, busy or idle, wi
   fs.unlinkSync(path.join(dir, `${process.pid}.json`));
   await new Promise((r) => server.close(r));
   try { fs.unlinkSync(socket); } catch { /* already gone */ }
+  forgetPipes();
   engine.syncPresence();
   assert.equal(engine.publicSession(store.session('open-1')).live, false);
   } finally {

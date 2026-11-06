@@ -5,7 +5,7 @@ Kroog runs on your computer and maps the Claude Code chats on it. This page is t
 ## Reads
 
 - `~/.claude/projects/**`: Claude Code's chat transcripts and its per-project memory (`memory/`). Kroog reads transcripts to show a conversation and to count what a chat cost; it never changes them.
-- `~/.claude/sessions/`: Claude Code's registry of open chats: which are open, busy or idle, and each one's inbox address and inbox token.
+- `~/.claude/sessions/`: Claude Code's registry of open chats: which are open, busy or idle, and each one's inbox address (a socket, or a named pipe on Windows) and inbox token.
 - `~/.claude/settings.json`: to see its own hooks.
 - For the brain, text files only (`.md`, `.mdx`, `.txt`): `~/.claude/CLAUDE.md`, `AGENTS.md`, `rules/`, `skills/`, `agents/`, `commands/`, `plans/` and `output-styles/`, and each project's `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and `.claude/` docs.
 - The VS Code and Cursor extension folders, to find which Claude Code version they carry and its command line.
@@ -15,8 +15,8 @@ Never: `~/.claude/.credentials.json`, the macOS Keychain, any other `.env`, your
 
 ## Writes
 
-- `~/.kroog/`: chats for the last 14 days, notes, briefs, each open chat's inbox address and token (copied from Claude Code's registry), usage readings for 30 days, the brain index (which holds the text of the files it indexed), settings, its token (mode 600), the hook script, backups of `~/.claude/settings.json`, and your API key in `.env` if you add one.
-- `~/.claude/settings.json`: hook entries that run `~/.kroog/hook.sh`, after a backup.
+- `~/.kroog/`: chats for the last 14 days, notes, briefs, each open chat's inbox address and token (copied from Claude Code's registry), usage readings for 30 days, the brain index (which holds the text of the files it indexed), settings, its token (mode 600), the hook relay (`hook.sh`, and `hook.mjs` for Windows or a system without curl), backups of `~/.claude/settings.json`, and your API key in `.env` if you add one.
+- `~/.claude/settings.json`: hook entries that run Kroog's hook relay, after a backup.
 - Claude Code's plugins: the Kroog mod at the user scope, from this folder when Kroog is a git clone, otherwise from the GitHub repository.
 - Claude Code's MCP servers: the `kroog-brain` tool at the user scope, only when you press **add to claude code** on the brain page.
 - `node bin/kroog.js unlink` removes the hooks, the mod and the brain tool.
@@ -47,7 +47,7 @@ Never: `~/.claude/.credentials.json`, the macOS Keychain, any other `.env`, your
 ## What someone else on your computer could do
 
 - Another program running as you can do what you can: read `~/.claude` and `~/.kroog`, and with the token use Kroog (read chats, send context into them, answer a question Kroog is holding). Keep your user account yours.
-- Another account on the same computer can connect to `127.0.0.1`, but gets nothing from Kroog without the token, which only your account can read.
+- Another account on the same computer can connect to `127.0.0.1`, but gets nothing from Kroog without the token, which only your account can read. On Windows, file modes do not apply: the token is private because `~/.kroog` is in your user folder, which other standard accounts cannot open (an administrator can).
 - A web page in your browser cannot reach Kroog: it checks the host, the origin and the token.
 
 ## How this is checked

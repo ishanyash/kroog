@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SecondBrain, snippetFor } from '../src/memory/index.js';
 import { chunkMarkdown } from '../src/memory/chunk.js';
 import { listSources } from '../src/memory/sources.js';
@@ -67,7 +68,7 @@ test('chunking keeps the heading path and the skill name', () => {
 test('only text files are indexed: never settings, keys, transcripts or caches', () => {
   const { claudeDir, proj } = fakeClaude();
   const files = listSources({ claudeDir, projects: [proj] });
-  const names = files.map((f) => path.relative(path.dirname(claudeDir), f.path)).sort();
+  const names = files.map((f) => path.relative(path.dirname(claudeDir), f.path).split(path.sep).join('/')).sort();
   assert.deepEqual(names, [
     '.claude/CLAUDE.md',
     '.claude/projects/-Users-me-code-shop/memory/MEMORY.md',
@@ -172,7 +173,7 @@ test('the Ollama client finds a pulled model and uses EmbeddingGemma prefixes', 
 });
 
 test('each kind lists its own latest files, notes included, even when other kinds changed more recently', async () => {
-  const claudeDir = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'demo-brain');
+  const claudeDir = fileURLToPath(new URL('../src/demo-brain', import.meta.url));
   const notes = [{ id: 'n1', text: 'Runs over $5 stop before they start.', type: 'Decision', project: 'dbt-cost', t: 1 }];
   const brain = new SecondBrain({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-brain-kinds-')), claudeDir, embedder: null, getNotes: () => notes, getProjects: () => [] });
   await brain.build();

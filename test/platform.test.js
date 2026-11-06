@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { isPipe, inboxAddressValid, inboxPresent, commandLine, commandNames, fileLinkPath, sameFolder, baseName } from '../src/platform.js';
+import { isPipe, inboxAddressValid, inboxPresent, forgetPipes, commandLine, commandNames, fileLinkPath, sameFolder, baseName } from '../src/platform.js';
 import { hookCommand, hookNodeScript, relayKind, withKroogHooks, withoutKroogHooks } from '../src/link.js';
 import { folderUrl } from '../src/editor.js';
 import { tildePath, fileLink, isFilePath } from '../public/util.js';
@@ -20,8 +20,24 @@ test('a chat inbox is a named pipe on Windows and a socket file elsewhere', () =
   assert.equal(inboxAddressValid('C:\\Windows\\system32\\cmd.exe', { platform: 'win32' }), false);
   assert.equal(inboxAddressValid('/etc/passwd', { platform: 'win32' }), false);
   assert.equal(inboxAddressValid(pipe, { platform: 'linux' }), false);
-  assert.equal(inboxPresent(pipe, { platform: 'win32' }), true);
   assert.equal(inboxAddressValid('\\\\.\\pipe\\a\0b', { platform: 'win32' }), false);
+});
+
+test('on Windows a chat\'s inbox is there while its pipe is in the list of open pipes', () => {
+  const pipe = '\\\\.\\pipe\\claude-code-1234';
+  let open = ['claude-code-1234', 'other'];
+  const readdir = () => open;
+  forgetPipes();
+  assert.equal(inboxPresent(pipe, { platform: 'win32', readdir }), true);
+  assert.equal(inboxPresent('\\\\.\\pipe\\CLAUDE-code-1234', { platform: 'win32', readdir }), true, 'pipe names ignore case');
+  open = ['other'];
+  forgetPipes();
+  assert.equal(inboxPresent(pipe, { platform: 'win32', readdir }), false, 'a closed chat\'s pipe is gone from the list');
+  assert.equal(inboxPresent('/tmp/x.sock', { platform: 'win32', readdir }), false);
+  // When the list cannot be read, Kroog says maybe, and sending finds out.
+  forgetPipes();
+  assert.equal(inboxPresent(pipe, { platform: 'win32', readdir: () => { throw new Error('no'); } }), true);
+  forgetPipes();
 });
 
 test('a .cmd file starts through cmd.exe with every argument quoted; an .exe starts directly', () => {

@@ -34,12 +34,32 @@ export function inboxAddressValid(p, { platform = process.platform } = {}) {
   }
 }
 
-// Is the inbox still there? A socket file can be looked at; a pipe can only be tried, so on
-// Windows this says "maybe", and sending finds out (a closed chat's pipe answers ENOENT).
-export function inboxPresent(p, { platform = process.platform } = {}) {
+// Is the inbox still there? A socket file can be looked at. A pipe cannot (opening it would
+// connect to the chat), but Windows lists every open pipe under \\.\pipe\, so Kroog looks for
+// its name there. The list is kept for a moment, since a sync looks at every chat at once.
+let pipeList = { at: 0, names: null };
+function openPipes(readdir) {
+  if (Date.now() - pipeList.at > 250) {
+    let names = null;
+    try { names = new Set(readdir('\\\\.\\pipe\\').map((n) => n.toLowerCase())); } catch { /* not listable: say maybe */ }
+    pipeList = { at: Date.now(), names };
+  }
+  return pipeList.names;
+}
+
+export function inboxPresent(p, { platform = process.platform, readdir = fs.readdirSync } = {}) {
   const s = String(p || '');
-  if (platform === 'win32') return isPipe(s);
+  if (platform === 'win32') {
+    if (!isPipe(s)) return false;
+    const names = openPipes(readdir);
+    return names ? names.has(s.slice(9).toLowerCase()) : true;
+  }
   try { return fs.statSync(s).isSocket(); } catch { return false; }
+}
+
+// Forget the cached pipe list (tests, or right after a chat closes).
+export function forgetPipes() {
+  pipeList = { at: 0, names: null };
 }
 
 // ---------------------------------------------------------------- starting programs

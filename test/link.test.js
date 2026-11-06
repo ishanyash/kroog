@@ -30,11 +30,13 @@ test('link keeps your own hooks and settings, and unlink puts things back', () =
   for (const def of HOOK_EVENTS) assert.ok(after.hooks[def.event], `missing ${def.event}`);
   assert.equal(after.hooks.Stop[0].matcher, undefined);
   assert.equal(after.hooks.PermissionRequest[0].hooks[0].timeout, 600);
-  assert.match(after.hooks.PreToolUse[0].hooks[0].command, /hook\.sh' PreToolUse$/);
+  // sh and curl on macOS and Linux; the Node relay on Windows (or where curl is missing).
+  const node = result.relay === 'node';
+  assert.match(after.hooks.PreToolUse[0].hooks[0].command, node ? /hook\.mjs["']? PreToolUse$/ : /hook\.sh' PreToolUse$/);
 
   const script = fs.readFileSync(result.scriptPath, 'utf8');
-  assert.match(script, /127\.0\.0\.1:4999\/hook\/\$EVENT/);
-  assert.match(script, /exit 0\s*$/);
+  assert.match(script, node ? /'http:\/\/127\.0\.0\.1:4999\/hook\/'/ : /127\.0\.0\.1:4999\/hook\/\$EVENT/);
+  if (!node) assert.match(script, /exit 0\s*$/);
 
   link({ port: 4999 });
   const twice = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));

@@ -196,14 +196,20 @@ footer a { color: var(--ink-2); }
 cd ~/kroog
 node bin/kroog.js link
 node bin/kroog.js start</pre><button type="button" data-copy="cmd-install">copy</button></div>
+          <p class="small">On Windows, in PowerShell:</p>
+          <div class="cmds"><pre id="cmd-install-win">git clone https://github.com/ishanyash/kroog.git $HOME\kroog
+cd $HOME\kroog
+node bin/kroog.js link
+node bin/kroog.js start</pre><button type="button" data-copy="cmd-install-win">copy</button></div>
         </div>
         <div>
           <table>
             <thead><tr><th>You need</th><th>Version</th></tr></thead>
             <tbody>
-              <tr><td>macOS or Linux</td><td>Windows: use WSL</td></tr>
+              <tr><td>macOS, Linux or Windows</td><td>Windows 10 or 11, no WSL needed</td></tr>
               <tr><td>Node.js</td><td>20 or newer</td></tr>
-              <tr><td>Claude Code</td><td>2.1.224 or newer; 2.1.299 or newer for the plan's usage windows</td></tr>
+              <tr><td>Claude Code</td><td>2.1.224 or newer (2.1.234 on Windows); 2.1.299 or newer for the plan's usage windows</td></tr>
+              <tr><td>Git</td><td>to download and update Kroog</td></tr>
               <tr><td>VS Code or Cursor</td><td>to open chats from Kroog (optional)</td></tr>
               <tr><td>A Claude plan</td><td>Pro or Max, for the usage windows (optional)</td></tr>
             </tbody>
@@ -228,6 +234,7 @@ node bin/kroog.js start</pre><button type="button" data-copy="cmd-install">copy<
       <details><summary>What does it cost?</summary><p>Kroog is free. The short summaries are written by a small model, by default Claude Code with Haiku on your plan, with a daily cap. You can use a local model with Ollama, your own API key, or turn it off.</p></details>
       <details><summary>Why are the dollars on the burn page so high?</summary><p>They are what the tokens would cost on the API at list price, the same figure Claude Code reports. On a Pro or Max plan you pay the plan's price, not this. Most tokens are cache reads, because every request re-reads the conversation so far.</p></details>
       <details><summary>Does it work with Cursor or the terminal?</summary><p>Chats from VS Code, Cursor and the terminal all show up. Opening a chat or starting a new one from Kroog is built and tested for VS Code.</p></details>
+      <details><summary>Does it work on Windows?</summary><p>Yes, without WSL: in PowerShell, Windows Terminal or Git Bash. The install, the hooks, the map and the mod are tested on Windows on every change. Sending context into chats on Windows is newer and has had less real use.</p></details>
       <details><summary>Will it keep working when Claude Code updates?</summary><p>Some of what Kroog reads is internal to Claude Code and can change. When something changes, Kroog falls back (for example, to putting the context on your clipboard) and says so.</p></details>
     </section>
   </div>

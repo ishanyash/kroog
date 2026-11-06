@@ -27,6 +27,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test('a message to an idle VS Code chat goes into its Claude Code inbox', async () => {
   const chat = await fakeChat();
+  try {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-in-')), 'inboxes.json');
   const store = new Store();
   const engine = new Engine({ store, getSettings: () => ({ permissionHoldSeconds: 30 }), inbox: new Inbox({ file }) });
@@ -34,7 +35,8 @@ test('a message to an idle VS Code chat goes into its Claude Code inbox', async 
   await engine.handle('UserPromptSubmit', { session_id: 'v1', cwd: '/x', prompt: 'hi' }, meta);
   await engine.handle('Stop', { session_id: 'v1', cwd: '/x', last_assistant_message: 'All done here.' }, meta);
   assert.equal(engine.publicSession(store.session('v1')).inbox, true);
-  assert.equal((fs.statSync(file).mode & 0o777), 0o600, 'the inbox list is private');
+  // File modes are a macOS and Linux idea; on Windows the user folder keeps it private.
+  if (process.platform !== 'win32') assert.equal((fs.statSync(file).mode & 0o777), 0o600, 'the inbox list is private');
 
   const r = await engine.send('v1', 'Now add a test');
   assert.equal(r.delivered, 'inbox');
@@ -61,6 +63,9 @@ test('a message to an idle VS Code chat goes into its Claude Code inbox', async 
   // Inbox addresses survive a Kroog restart.
   const again = new Inbox({ file });
   assert.equal(again.map.size, 0, 'the closed chat was forgotten');
+  } finally {
+    await chat.close();
+  }
 });
 
 test('Kroog ignores an inbox path that is not a socket', async () => {

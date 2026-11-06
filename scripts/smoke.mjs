@@ -6,6 +6,7 @@
 //
 //   node scripts/smoke.mjs
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -14,7 +15,12 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bin = path.join(root, 'bin', 'kroog.js');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-smoke-'));
-const port = 48000 + Math.floor(Math.random() * 1500);
+// A port the system lets us use (Windows reserves whole ranges of high ports).
+const port = await new Promise((resolve, reject) => {
+  const s = net.createServer();
+  s.on('error', reject);
+  s.listen(0, '127.0.0.1', () => { const { port: p } = s.address(); s.close(() => resolve(p)); });
+});
 const env = { ...process.env, KROOG_HOME: path.join(tmp, 'kroog'), CLAUDE_CONFIG_DIR: path.join(tmp, 'claude') };
 for (const k of Object.keys(env)) if (/^(CLAUDE_CODE_(SESSION_|MESSAGING_|ENTRYPOINT)|CLAUDECODE$)/.test(k)) delete env[k];
 const project = path.join(tmp, 'shop');
