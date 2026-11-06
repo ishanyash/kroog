@@ -15,9 +15,13 @@ Kroog is the map of your Claude Code chats, and it runs only on your computer. C
 git clone https://github.com/ishanyash/kroog.git
 cd kroog
 node bin/kroog.js demo       # made-up chats, nothing on your computer is touched
-npm test                     # 80 or so tests, no network needed
+npm test                     # about 100 tests, one file at a time, no network needed
+npm test -- inbox            # only the test files whose name contains "inbox"
+node scripts/smoke.mjs       # link, hooks, start, stop, unlink against a throwaway Claude Code folder
 claude plugin validate mod   # the mod, if you changed it
 ```
+
+The same commands work in PowerShell on Windows. GitHub Actions runs the tests on macOS, Linux and Windows with Node 20 and 22, and the smoke check on all three.
 
 Node 20 or newer, and nothing else to install. There are no dependencies.
 
@@ -26,7 +30,7 @@ The code follows a few rules you can see in the tests: every colour and font is 
 ## Pull requests
 
 - One change per pull request, with a test when the change is testable.
-- Say what you tried, on which system (macOS or Linux), with which Claude Code version. If you could only test in the demo, say so.
+- Say what you tried, on which system (macOS, Linux or Windows), with which Claude Code version. If you could only test in the demo, say so.
 - Keep the README's language: short sentences, no claims about things you did not check.
 
 ## Reporting a problem
