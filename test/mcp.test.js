@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SecondBrain } from '../src/memory/index.js';
 import { mcpAddArgs } from '../src/mcp.js';
 
@@ -19,7 +19,8 @@ test('the kroog-brain MCP server answers over stdio', async () => {
   const dir = path.join(tmp, 'brain');
   await new SecondBrain({ dir, claudeDir, embedder: null }).build();
 
-  const code = `import('${path.join(ROOT, 'src', 'mcp.js')}').then((m) => m.runMcp({ dir: ${JSON.stringify(dir)}, claudeDir: ${JSON.stringify(claudeDir)}, embedder: null }));`;
+  // A file URL, so a Windows path (C:\...) imports too.
+  const code = `import(${JSON.stringify(pathToFileURL(path.join(ROOT, 'src', 'mcp.js')).href)}).then((m) => m.runMcp({ dir: ${JSON.stringify(dir)}, claudeDir: ${JSON.stringify(claudeDir)}, embedder: null }));`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['pipe', 'pipe', 'inherit'] });
   const replies = [];
   let buf = '';

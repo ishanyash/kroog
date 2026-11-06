@@ -501,7 +501,11 @@ const looksLikeOurs = (command) => /(crew|kroog)\.js|[\\/]\.?(crew|kroog)[\\/]|\
 async function endProcess(pid, label) {
   // A process that has exited but not been collected by its parent yet (a "zombie" on Linux)
   // still answers kill(pid, 0); it holds nothing and counts as stopped.
-  const zombie = () => { try { return /\)\s+Z\s/.test(fs.readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { return false; } };
+  const zombie = () => {
+    if (process.platform === 'win32') return false;
+    try { return /\)\s+Z\s/.test(fs.readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { /* not Linux */ }
+    try { return /^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', timeout: 3000 }).trim()); } catch { return false; }
+  };
   const alive = () => { try { process.kill(pid, 0); return !zombie(); } catch { return false; } };
   try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
   let until = Date.now() + 4000;

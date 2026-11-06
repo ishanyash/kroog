@@ -64,7 +64,7 @@ export async function installMod({ claudePath = '', port = 4877, source = '' } =
   const r = await run(cli.path, ['plugin', 'install', MOD_NAME, '--marketplace', from, '--scope', 'user', '--config', `port=${port}`, '--json'], { timeoutMs: 120000 });
   let out = null;
   try { out = JSON.parse(r.stdout.trim().split('\n').pop() || 'null'); } catch { out = null; }
-  const where = from === root ? `${root}/mod` : `github.com/${from}`;
+  const where = from === root ? path.join(root, 'mod') : `github.com/${from}`;
   if (out && out.outcome === 'ok') return { ok: true, message: `The Kroog mod is installed from ${where}. Chats started from now on send their usage; open chats do after a restart or /reload-plugins.` };
   return { ok: false, error: (out && out.message) || (r.stderr || r.error || r.stdout).trim().slice(0, 300) || 'The install did not finish.' };
 }
