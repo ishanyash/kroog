@@ -38,8 +38,8 @@ export function inboxAddressValid(p, { platform = process.platform } = {}) {
 // connect to the chat), but Windows lists every open pipe under \\.\pipe\, so Kroog looks for
 // its name there. The list is kept for a moment, since a sync looks at every chat at once.
 let pipeList = { at: 0, names: null };
-function openPipes(readdir) {
-  if (Date.now() - pipeList.at > 250) {
+function openPipes(readdir, fresh = false) {
+  if (fresh || Date.now() - pipeList.at > 250) {
     let names = null;
     try { names = new Set(readdir('\\\\.\\pipe\\').map((n) => n.toLowerCase())); } catch { /* not listable: say maybe */ }
     pipeList = { at: Date.now(), names };
@@ -51,8 +51,12 @@ export function inboxPresent(p, { platform = process.platform, readdir = fs.read
   const s = String(p || '');
   if (platform === 'win32') {
     if (!isPipe(s)) return false;
-    const names = openPipes(readdir);
-    return names ? names.has(s.slice(9).toLowerCase()) : true;
+    const name = s.slice(9).toLowerCase();
+    const before = pipeList.at;
+    let names = openPipes(readdir);
+    // Not in a list made a moment ago: the chat may have just opened, so look once more.
+    if (names && !names.has(name) && pipeList.at === before) names = openPipes(readdir, true);
+    return names ? names.has(name) : true;
   }
   try { return fs.statSync(s).isSocket(); } catch { return false; }
 }

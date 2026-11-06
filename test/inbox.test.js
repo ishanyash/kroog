@@ -16,14 +16,20 @@ function fakeChat() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-test-'));
   const socket = endpoint(dir, '4242');
   const got = [];
+  const conns = new Set();
   const server = net.createServer((c) => {
+    conns.add(c);
     let buf = '';
     c.on('data', (d) => { buf += d; });
-    c.on('end', () => { got.push(...buf.trim().split('\n').map((l) => JSON.parse(l))); });
+    c.on('end', () => { got.push(...buf.trim().split('\n').map((l) => JSON.parse(l))); c.destroy(); });
+    c.on('close', () => conns.delete(c));
   });
-  return new Promise((resolve) => server.listen(socket, () => resolve({ socket, got, close: () => new Promise((r) => server.close(r)) })));
+  const close = () => new Promise((r) => { for (const c of conns) c.destroy(); server.close(r); });
+  return new Promise((resolve) => server.listen(socket, () => resolve({ socket, got, close })));
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// What arrives at a fake chat: a Windows pipe passes it on a little later than a socket.
+const until = async (ok, ms = 3000) => { for (const end = Date.now() + ms; Date.now() < end; await sleep(20)) if (ok()) return true; return ok(); };
 
 test('a message to an idle VS Code chat goes into its Claude Code inbox', async () => {
   const chat = await fakeChat();
@@ -40,7 +46,7 @@ test('a message to an idle VS Code chat goes into its Claude Code inbox', async 
 
   const r = await engine.send('v1', 'Now add a test');
   assert.equal(r.delivered, 'inbox');
-  await sleep(50);
+  assert.ok(await until(() => chat.got.length >= 2), 'the message reached the chat');
   assert.deepEqual(chat.got[0], { type: 'auth', token: 'tok123' });
   assert.equal(chat.got[1].type, 'user');
   assert.match(chat.got[1].message.content, /sent from Kroog[\s\S]*Now add a test/);
@@ -50,7 +56,7 @@ test('a message to an idle VS Code chat goes into its Claude Code inbox', async 
   await engine.handle('UserPromptSubmit', { session_id: 'src', cwd: '/x', prompt: 'other' }, { entry: 'claude-vscode' });
   const h = await engine.handoff({ text: 'BRIEF', goal: 'Use this', target: 'running', sessionId: 'v1', sources: ['src'] });
   assert.equal(h.delivered, 'inbox');
-  await sleep(50);
+  assert.ok(await until(() => chat.got.length >= 4), 'the brief reached the chat');
   assert.match(chat.got.at(-1).message.content, /Use this\n\nBRIEF/);
   assert.deepEqual(store.session('v1').inputs.at(-1).from, ['src']);
 

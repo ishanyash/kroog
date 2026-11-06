@@ -1,6 +1,6 @@
 {
   "name": "kroog",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Kroog: the map of your Claude Code chats. See what each chat did and how they connect, start the next chat with the context of earlier ones, and watch your plan's usage. Runs only on your computer.",
   "type": "module",
   "private": true,

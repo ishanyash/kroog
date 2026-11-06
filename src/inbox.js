@@ -114,7 +114,9 @@ export class Inbox {
       };
       const timer = setTimeout(() => { sock.destroy(); finish(new Error('The chat did not take the message in time.')); }, 5000);
       sock.on('connect', () => {
-        sock.end(`${lines.join('\n')}\n`, () => finish(null));
+        // Written and flushed: close our end. A Windows pipe has no half-close, so this is how
+        // the chat sees the end of the message there.
+        sock.end(`${lines.join('\n')}\n`, () => { sock.destroy(); finish(null); });
       });
       sock.on('error', finish);
     });

@@ -2,6 +2,18 @@
 
 Dates are 2026.
 
+## 1.6.0, 6 November: Windows
+
+- Kroog runs on Windows 10 and 11 without WSL, in PowerShell, Windows Terminal or Git Bash. The install steps for Windows are in the README and on the site.
+- The hooks use a small Node relay on Windows (`~/.kroog/hook.mjs`), the same command in Git Bash and in PowerShell, so they work whichever shell Claude Code picks. On macOS and Linux they still use `hook.sh`, and fall back to the Node relay where `curl` is missing.
+- A chat's inbox is a named pipe on Windows (Claude Code 2.1.234 or newer). Kroog sees which pipes are open, so a closed chat stops showing as open; `doctor` checks the version.
+- Claude Code found where Windows puts it: `claude.exe` from Anthropic's installer, or npm's `claude.cmd`. The same for `code.cmd` and `cursor.cmd`. Links open through Explorer, the clipboard uses `clip`, and `stop` finds Kroog's process with `netstat`.
+- The AI helper passes its prompt and settings to Claude Code as files in the temporary folder, deleted after each call, so long prompts work on Windows too.
+- Paths like `C:\Users\you\app` show as `~\app`, link to VS Code, and count as the same project with either slash or case.
+- `start` says in plain words when the system will not let it use a port. Messages no longer use `&&`.
+- On macOS, `stop` no longer waits on a process that has already ended.
+- GitHub Actions runs the tests on Windows too, and an end-to-end check on Windows, macOS and Linux: link, the hooks in each shell Claude Code uses, the map, the mod installed through Claude Code, stop and unlink. Each test file runs on its own with a time limit, and a hang names what kept it running.
+
 ## 1.5.0, 2 November: ready for the public
 
 - A README for people who have never heard of Kroog, a one-page website in `docs/` (for GitHub Pages), a 30-second tour as a GIF and a video, screenshots, and a social preview image.

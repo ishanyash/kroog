@@ -80,7 +80,7 @@ test('a new chat in the editor gets the context through its inbox once it appear
   const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
   const socket = endpoint(sockDir, 'new');
   const got = [];
-  const server = net.createServer((c) => { let buf = ''; c.on('data', (d) => { buf += d; }); c.on('end', () => got.push(buf)); });
+  const server = net.createServer((c) => { let buf = ''; c.on('data', (d) => { buf += d; }); c.on('end', () => { got.push(buf); c.destroy(); }); });
   await new Promise((r) => server.listen(socket, r));
   const dir = registry([]);
   const store = new Store();
@@ -148,7 +148,7 @@ test('when no new chat shows up, the context goes on the clipboard instead', asy
 test('without a hook receipt, Kroog says the chat has not taken the message yet', async () => {
   const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
   const socket = endpoint(sockDir, 'held');
-  const server = net.createServer((c) => c.on('data', () => {}));
+  const server = net.createServer((c) => { c.on('data', () => {}); c.on('end', () => c.destroy()); });
   await new Promise((r) => server.listen(socket, r));
   const dir = registry([{ pid: process.pid, sessionId: 'held-1', cwd: '/Users/me/code/app', entrypoint: 'claude-vscode', status: 'idle', statusUpdatedAt: Date.now(), startedAt: Date.now(), messagingSocketPath: socket, token: 'tok' }]);
   const store = new Store();

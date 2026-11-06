@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { isPipe, inboxAddressValid, inboxPresent, forgetPipes, commandLine, commandNames, fileLinkPath, sameFolder, baseName } from '../src/platform.js';
 import { hookCommand, hookNodeScript, relayKind, withKroogHooks, withoutKroogHooks } from '../src/link.js';
@@ -38,6 +39,23 @@ test('on Windows a chat\'s inbox is there while its pipe is in the list of open 
   forgetPipes();
   assert.equal(inboxPresent(pipe, { platform: 'win32', readdir: () => { throw new Error('no'); } }), true);
   forgetPipes();
+});
+
+test('Windows lists a real pipe while it is open, and not once it closes', { skip: process.platform === 'win32' ? false : 'Windows only' }, async () => {
+  const name = `kroog-test-${process.pid}-list`;
+  const pipe = `\\\\.\\pipe\\${name}`;
+  const server = net.createServer();
+  await new Promise((r) => server.listen(pipe, r));
+  let listed;
+  try { listed = fs.readdirSync('\\\\.\\pipe\\'); } catch (e) { listed = e; }
+  assert.ok(Array.isArray(listed), `the list of pipes could not be read: ${listed && listed.message}`);
+  assert.ok(listed.some((n) => n.toLowerCase() === name), `not in the list; it starts: ${listed.slice(0, 6).join(', ')}`);
+  forgetPipes();
+  assert.equal(inboxPresent(pipe), true);
+  await new Promise((r) => server.close(r));
+  forgetPipes();
+  assert.equal(fs.readdirSync('\\\\.\\pipe\\').some((n) => n.toLowerCase() === name), false, 'still listed after it closed');
+  assert.equal(inboxPresent(pipe), false);
 });
 
 test('a .cmd file starts through cmd.exe with every argument quoted; an .exe starts directly', () => {

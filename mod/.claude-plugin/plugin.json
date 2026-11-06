@@ -1,6 +1,6 @@
 {
   "name": "kroog",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Sends your plan usage (the 5-hour and weekly windows) and each chat's cost to the Kroog running on this computer, at 127.0.0.1, so the map can show them. Local only.",
   "author": {
     "name": "Ishan Yash"

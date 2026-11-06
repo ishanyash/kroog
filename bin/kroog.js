@@ -35,7 +35,7 @@ import { modStatus, installMod, uninstallMod, removeBrainTool, installLine, isSt
 import { openExternal, execCli } from '../src/platform.js';
 import { AiHelper } from '../src/ai.js';
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 const args = process.argv.slice(2);
 const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
