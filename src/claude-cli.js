@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, execFile } from 'node:child_process';
+import { commandNames, isRunnable, execCli, spawnCli } from './platform.js';
 
 // Claude Code sets these for the chats it runs. A program started from inside a chat must
 // not inherit them, or it would think it is part of that chat.
@@ -19,16 +19,7 @@ export function cleanEnv(extra = {}) {
   return { ...env, ...extra };
 }
 
-function isExec(file) {
-  try {
-    const st = fs.statSync(file);
-    if (!st.isFile()) return false;
-    fs.accessSync(file, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+const isExec = (file) => isRunnable(file);
 
 function versionKey(name) {
   const m = /(\d+)\.(\d+)\.(\d+)/.exec(name);
@@ -45,12 +36,12 @@ function extensionCopies(home) {
     names.sort((a, b) => versionKey(b) - versionKey(a));
     for (const n of names) {
       const base = path.join(root, n, 'resources');
-      const tries = [path.join(base, 'native-binary', 'claude'), path.join(base, 'claude'), path.join(base, 'bin', 'claude')];
+      const names = commandNames('claude');
+      const tries = [];
+      for (const sub of ['native-binary', '', 'bin']) for (const name of names) tries.push(path.join(base, sub, name));
       // Fall back to a short search, in case the folder layout changes.
       try {
-        for (const sub of fs.readdirSync(base)) {
-          tries.push(path.join(base, sub, 'claude'));
-        }
+        for (const sub of fs.readdirSync(base)) for (const name of names) tries.push(path.join(base, sub, name));
       } catch { /* no resources folder */ }
       for (const f of tries) if (isExec(f)) { found.push({ path: f, from: dir.split('/')[0].replace('.', '') }); break; }
     }
@@ -62,8 +53,12 @@ export function findClaude(preferred = '') {
   const home = os.homedir();
   const tries = [];
   if (preferred) tries.push({ path: preferred, from: 'setup' });
-  for (const dir of String(process.env.PATH || '').split(path.delimiter).filter(Boolean)) tries.push({ path: path.join(dir, 'claude'), from: 'terminal' });
-  for (const f of [path.join(home, '.local/bin/claude'), path.join(home, '.claude/local/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude', path.join(home, '.npm-global/bin/claude')]) tries.push({ path: f, from: 'terminal' });
+  const names = commandNames('claude');
+  for (const dir of String(process.env.PATH || '').split(path.delimiter).filter(Boolean)) for (const name of names) tries.push({ path: path.join(dir, name), from: 'terminal' });
+  const usual = process.platform === 'win32'
+    ? [path.join(home, '.local', 'bin', 'claude.exe'), path.join(home, '.claude', 'local', 'claude.exe'), path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm', 'claude.cmd')]
+    : [path.join(home, '.local/bin/claude'), path.join(home, '.claude/local/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude', path.join(home, '.npm-global/bin/claude')];
+  for (const f of usual) tries.push({ path: f, from: 'terminal' });
   for (const t of tries) if (isExec(t.path)) return t;
   const ext = extensionCopies(home);
   return ext[0] || null;
@@ -71,7 +66,7 @@ export function findClaude(preferred = '') {
 
 export function claudeVersion(bin) {
   return new Promise((resolve) => {
-    execFile(bin, ['--version'], { timeout: 15000, env: cleanEnv() }, (error, stdout) => {
+    execCli(bin, ['--version'], { timeout: 15000, env: cleanEnv() }, (error, stdout) => {
       if (error) return resolve(null);
       const m = /(\d+\.\d+\.\d+)/.exec(String(stdout));
       resolve(m ? m[1] : String(stdout).trim().slice(0, 40));
@@ -80,20 +75,32 @@ export function claudeVersion(bin) {
 }
 
 // One small model call. Hooks are off, so it never shows up in Kroog as a chat. No tools,
-// no saved session, Claude Code's long system prompt replaced by a short one.
+// no saved session, Claude Code's long system prompt replaced by a short one. The system
+// prompt and the settings go in as files and the prompt through stdin, so no long or
+// multi-line text is on the command line (cmd.exe would mangle it on Windows).
 export function ask(bin, { system, prompt, model = 'haiku', timeoutMs = 90000 }) {
   return new Promise((resolve, reject) => {
-    const args = ['-p', '--model', model, '--no-session-persistence', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--settings', '{"disableAllHooks":true}'];
-    if (system) args.push('--system-prompt', system);
-    const child = spawn(bin, args, { cwd: os.tmpdir(), env: cleanEnv({ KROOG_INTERNAL: '1' }), stdio: ['pipe', 'pipe', 'pipe'] });
+    let dir = '';
+    try { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-ask-')); } catch (e) { reject(new Error(`Could not prepare the call: ${e.message}`)); return; }
+    const cleanup = () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* temporary */ } };
+    const tmpSettings = path.join(dir, 'settings.json');
+    fs.writeFileSync(tmpSettings, '{"disableAllHooks":true}');
+    const args = ['-p', '--model', model, '--no-session-persistence', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--settings', tmpSettings];
+    if (system) {
+      const tmpSystem = path.join(dir, 'system.txt');
+      fs.writeFileSync(tmpSystem, String(system));
+      args.push('--system-prompt-file', tmpSystem);
+    }
+    const child = spawnCli(bin, args, { cwd: os.tmpdir(), env: cleanEnv({ KROOG_INTERNAL: '1' }), stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('Claude Code took too long to answer.')); }, timeoutMs);
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { err += d; });
-    child.on('error', (e) => { clearTimeout(timer); reject(new Error(`Could not start Claude Code: ${e.message}`)); });
+    child.on('error', (e) => { clearTimeout(timer); cleanup(); reject(new Error(`Could not start Claude Code: ${e.message}`)); });
     child.on('close', (code) => {
       clearTimeout(timer);
+      cleanup();
       let data = null;
       try { data = JSON.parse(out); } catch { /* not json */ }
       if (!data) return reject(new Error(`Claude Code did not answer (exit ${code}). ${(err || out).trim().slice(0, 200)}`));
@@ -113,7 +120,7 @@ export function startTurn(bin, { mode, id, from, cwd, prompt, permissionMode = '
   else if (mode === 'fork') args.push('--resume', from, '--fork-session', '--session-id', id);
   if (permissionMode && permissionMode !== 'default') args.push('--permission-mode', permissionMode);
   if (model) args.push('--model', model);
-  const child = spawn(bin, args, { cwd, env: cleanEnv({ KROOG_RUN: '1' }), stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawnCli(bin, args, { cwd, env: cleanEnv({ KROOG_RUN: '1' }), stdio: ['pipe', 'pipe', 'pipe'] });
   child.stdin.end(String(prompt || ''));
   return child;
 }

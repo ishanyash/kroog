@@ -7,6 +7,7 @@
 //                    chat Kroog is holding (Drive): continues it now (Stop hook "block" + reason).
 //                    other finished chats: opens the editor with your text typed in (deep link).
 //   Stop          -> ends the turn at its next step (continue: false).
+import { sameFolder as samePlatformFolder } from './platform.js';
 import { NO_OUTPUT, truncate, clip, firstLine, looksLikeQuestion, lastQuestion, titleFromPrompt, shortId, cleanPrompt, isKroogMessage } from './util.js';
 import { describeTool, describePermission, applyPlanTool, fileTouched } from './describe.js';
 import { detectApp } from './sources.js';
@@ -44,10 +45,7 @@ export function titleForBrief(goal, names = []) {
 
 // The same folder, allowing a trailing slash and a workspace that is a parent or child of it.
 function sameFolder(a, b) {
-  const x = String(a || '').replace(/\/+$/, '');
-  const y = String(b || '').replace(/\/+$/, '');
-  if (!x || !y) return false;
-  return x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
+  return samePlatformFolder(a, b);
 }
 
 const BRIEF_RE = /\[(?:Kroog|Crew) brief ([a-z0-9]{4,12})\]/i;

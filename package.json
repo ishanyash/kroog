@@ -13,7 +13,7 @@
     "link": "node bin/kroog.js link",
     "unlink": "node bin/kroog.js unlink",
     "status": "node bin/kroog.js status",
-    "test": "node --test test/*.test.js"
+    "test": "node scripts/test.mjs"
   },
   "engines": {
     "node": ">=20"

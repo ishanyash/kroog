@@ -16,7 +16,7 @@ test('links for folders and chats', () => {
   assert.equal(editorName('whatever'), 'VS Code');
 });
 
-test('the editor command is found on the PATH or in the app, and a folder opens through it', async () => {
+test('the editor command is found on the PATH or in the app, and a folder opens through it', { skip: process.platform === 'win32' ? 'uses sh scripts as stand-ins' : false }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kroog-ed-'));
   const fake = path.join(dir, 'code');
   fs.writeFileSync(fake, '#!/bin/sh\necho "$@" > "$0.log"\n', { mode: 0o755 });

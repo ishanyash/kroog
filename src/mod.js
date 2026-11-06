@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
+import { execCli } from './platform.js';
 import { findClaude, cleanEnv } from './claude-cli.js';
 
 export const MOD_NAME = 'kroog';
@@ -31,7 +31,7 @@ export function isStableFolder(root = repoRoot()) {
 
 function run(bin, args, { timeoutMs = 60000 } = {}) {
   return new Promise((resolve) => {
-    execFile(bin, args, { timeout: timeoutMs, env: cleanEnv(), maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execCli(bin, args, { timeout: timeoutMs, env: cleanEnv(), maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       resolve({ ok: !error, stdout: String(stdout || ''), stderr: String(stderr || ''), error: error ? error.message : '' });
     });
   });

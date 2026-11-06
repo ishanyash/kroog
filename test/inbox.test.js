@@ -8,10 +8,13 @@ import { Store } from '../src/store.js';
 import { Engine } from '../src/engine.js';
 import { Inbox } from '../src/inbox.js';
 
+// A chat's inbox address for tests: a socket file on macOS and Linux, a named pipe on Windows.
+const endpoint = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\kroog-test-${process.pid}-${name}-${Math.random().toString(36).slice(2, 8)}` : path.join(dir, `${name}.sock`));
+
 // A stand-in for a Claude Code chat's inbox: a Unix socket that records what arrives.
 function fakeChat() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-test-'));
-  const socket = path.join(dir, '4242.sock');
+  const socket = endpoint(dir, '4242');
   const got = [];
   const server = net.createServer((c) => {
     let buf = '';
@@ -69,7 +72,7 @@ test('Kroog ignores an inbox path that is not a socket', async () => {
 
 test('a socket file left behind by a closed chat is noticed', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-probe-'));
-  const socket = path.join(dir, '7.sock');
+  const socket = endpoint(dir, '7');
   const server = net.createServer(() => {});
   await new Promise((r) => server.listen(socket, r));
   const inbox = new Inbox();

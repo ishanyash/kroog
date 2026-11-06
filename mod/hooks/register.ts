@@ -10,8 +10,9 @@ let token: string | null = null
 async function tokenOf($: Parameters<Parameters<Register>[0]>[2] extends (...args: infer A) => unknown ? A[0] : never): Promise<string> {
   if (token !== null) return token
   try {
-    // Kroog's folder: KROOG_HOME when set (as Kroog itself reads it), else ~/.kroog.
-    const dir = (await $.env.get('KROOG_HOME')) || `${await $.env.get('HOME')}/.kroog`
+    // Kroog's folder: KROOG_HOME when set (as Kroog itself reads it), else ~/.kroog. Windows
+    // often has no HOME, so there it is USERPROFILE.
+    const dir = (await $.env.get('KROOG_HOME')) || `${(await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))}/.kroog`
     const read = await $.fs.read(`${dir}/token`)
     token = (typeof read === 'string' ? read : '').trim()
   } catch {

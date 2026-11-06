@@ -9,13 +9,15 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnCli, commandNames, isRunnable, openExternal, fileLinkPath } from './platform.js';
 
+// `apps`: where the command sits inside the app on macOS. `win`: the same on Windows, under
+// %LOCALAPPDATA%\Programs (a per-user install) or Program Files (an install for everyone).
 export const EDITORS = {
-  vscode: { name: 'VS Code', scheme: 'vscode', command: 'code', apps: ['Visual Studio Code.app/Contents/Resources/app/bin/code'] },
-  cursor: { name: 'Cursor', scheme: 'cursor', command: 'cursor', apps: ['Cursor.app/Contents/Resources/app/bin/cursor'] },
-  'vscode-insiders': { name: 'VS Code Insiders', scheme: 'vscode-insiders', command: 'code-insiders', apps: ['Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders'] },
-  windsurf: { name: 'Windsurf', scheme: 'windsurf', command: 'windsurf', apps: ['Windsurf.app/Contents/Resources/app/bin/windsurf'] },
+  vscode: { name: 'VS Code', scheme: 'vscode', command: 'code', apps: ['Visual Studio Code.app/Contents/Resources/app/bin/code'], win: ['Microsoft VS Code/bin/code.cmd'] },
+  cursor: { name: 'Cursor', scheme: 'cursor', command: 'cursor', apps: ['Cursor.app/Contents/Resources/app/bin/cursor'], win: ['cursor/resources/app/bin/cursor.cmd'] },
+  'vscode-insiders': { name: 'VS Code Insiders', scheme: 'vscode-insiders', command: 'code-insiders', apps: ['Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders'], win: ['Microsoft VS Code Insiders/bin/code-insiders.cmd'] },
+  windsurf: { name: 'Windsurf', scheme: 'windsurf', command: 'windsurf', apps: ['Windsurf.app/Contents/Resources/app/bin/windsurf'], win: ['Windsurf/bin/windsurf.cmd'] },
 };
 
 export function editorKey(editor) {
@@ -26,24 +28,28 @@ export function editorName(editor) {
   return EDITORS[editorKey(editor)].name;
 }
 
-function isExec(file) {
-  try { fs.accessSync(file, fs.constants.X_OK); return fs.statSync(file).isFile(); } catch { return false; }
-}
+const isExec = (file) => isRunnable(file);
 
 // The editor's command on this computer, if it is installed: on the PATH, in the usual places,
 // or inside the app itself (VS Code: "Shell Command: Install 'code' command in PATH" is
 // not needed for that).
-export function findEditorCommand(editor, { env = process.env, home = os.homedir() } = {}) {
+export function findEditorCommand(editor, { env = process.env, home = os.homedir(), platform = process.platform } = {}) {
   const e = EDITORS[editorKey(editor)];
   const tries = [];
-  for (const dir of String(env.PATH || '').split(path.delimiter).filter(Boolean)) tries.push(path.join(dir, e.command));
-  tries.push(`/opt/homebrew/bin/${e.command}`, `/usr/local/bin/${e.command}`);
-  for (const app of e.apps) tries.push(path.join('/Applications', app), path.join(home, 'Applications', app));
-  return tries.find(isExec) || null;
+  for (const dir of String(env.PATH || '').split(path.delimiter).filter(Boolean)) for (const name of commandNames(e.command, { platform })) tries.push(path.join(dir, name));
+  if (platform === 'win32') {
+    const roots = [env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'Programs') : path.join(home, 'AppData', 'Local', 'Programs'), env.ProgramFiles || 'C:\\Program Files'];
+    for (const root of roots) for (const rel of e.win) tries.push(path.join(root, ...rel.split('/')));
+  } else {
+    tries.push(`/opt/homebrew/bin/${e.command}`, `/usr/local/bin/${e.command}`);
+    for (const app of e.apps) tries.push(path.join('/Applications', app), path.join(home, 'Applications', app));
+  }
+  return tries.find((f) => isRunnable(f, { platform })) || null;
 }
 
+// vscode://file/<folder>/, with forward slashes on Windows too ("/C:/Users/me/app/").
 export function folderUrl(editor, folder) {
-  const f = String(folder || '');
+  const f = fileLinkPath(folder);
   return `${EDITORS[editorKey(editor)].scheme}://file${f.endsWith('/') ? f : `${f}/`}`;
 }
 
@@ -56,7 +62,7 @@ export function chatUrl(editor, sessionId, prompt = '') {
 
 function spawnQuiet(cmd, args) {
   try {
-    const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+    const child = spawnCli(cmd, args, { stdio: 'ignore', detached: true });
     child.on('error', () => { /* reported through the return value of the caller */ });
     child.unref();
     return true;
@@ -72,8 +78,7 @@ export class EditorOpener {
     this.find = find;
     this.open = open || ((url) => {
       if (demo) return;
-      const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
-      spawnQuiet(cmd, [url]);
+      openExternal(url);
     });
     this.commands = new Map();
   }

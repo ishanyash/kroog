@@ -70,7 +70,7 @@ test('the mod reaches one host, carries no credential, and reads one file', () =
   assert.doesNotMatch(mod, /auth:/, 'no session credential rides on the request');
   const reads = [...mod.matchAll(/\$\.fs\.read\(([^)]*)\)/g)].map((m) => m[1]);
   assert.deepEqual(reads, ['`${dir}/token`']);
-  assert.match(mod, /const dir = \(await \$\.env\.get\('KROOG_HOME'\)\) \|\| `\$\{await \$\.env\.get\('HOME'\)\}\/\.kroog`/);
+  assert.match(mod, /const dir = \(await \$\.env\.get\('KROOG_HOME'\)\) \|\| `\$\{\(await \$\.env\.get\('HOME'\)\) \|\| \(await \$\.env\.get\('USERPROFILE'\)\)\}\/\.kroog`/);
   assert.doesNotMatch(mod, /\$\.process|\$\.fs\.write|\$\.session\.send|\$\.model/);
 });
 

@@ -1,7 +1,7 @@
 // Kroog's connector into running Claude Code chats.
 //
 // Since v2.1.224, every Claude Code chat (VS Code, Cursor, Terminal, or `claude -p`) opens a
-// private inbox: a Unix socket only your user can reach. Claude Code tells hooks where it is
+// private inbox: a Unix socket (a named pipe on Windows) only your user can reach. Claude Code tells hooks where it is
 // (CLAUDE_CODE_MESSAGING_SOCKET, plus a per-chat token), and Kroog's hook passes that on.
 // A message written to the inbox reaches the chat between tool calls, or, if the chat is idle,
 // starts a new turn right away. Claude Code labels it as a message from another session, never
@@ -10,7 +10,7 @@
 // Kroog keeps the inbox addresses in ~/.kroog/inboxes.json (only your user can read it).
 import fs from 'node:fs';
 import net from 'node:net';
-import path from 'node:path';
+import { inboxAddressValid, inboxPresent } from './platform.js';
 
 const MAX_AGE = 14 * 86400000;
 
@@ -60,8 +60,7 @@ export class Inbox {
   has(sid) {
     const v = this.map.get(sid);
     if (!v) return false;
-    let ok = false;
-    try { ok = fs.statSync(v.socket).isSocket(); } catch { ok = false; }
+    const ok = inboxPresent(v.socket);
     // The chat closed: its socket is gone, so forget it.
     if (!ok) this.forget(sid);
     return ok;
@@ -122,18 +121,9 @@ export class Inbox {
   }
 }
 
-// Only a socket file owned by you, with Claude Code's naming, in a folder Claude Code uses.
+// Only a socket file owned by you, with Claude Code's naming (or, on Windows, a local pipe).
 export function valid(socket) {
-  const p = String(socket || '');
-  if (!path.isAbsolute(p) || !/\.sock$/.test(p) || p.includes('\0')) return false;
-  try {
-    const st = fs.statSync(p);
-    if (!st.isSocket()) return false;
-    if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
-    return true;
-  } catch {
-    return false;
-  }
+  return inboxAddressValid(socket);
 }
 
 // What the chat reads. Claude Code adds its own note that the message came from another

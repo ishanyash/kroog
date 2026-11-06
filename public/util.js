@@ -139,7 +139,18 @@ export function folderName(path) {
 }
 
 export function tildePath(path) {
-  return String(path || '').replace(/^\/Users\/[^/]+/, '~').replace(/^\/home\/[^/]+/, '~');
+  return String(path || '').replace(/^\/Users\/[^/]+/, '~').replace(/^\/home\/[^/]+/, '~').replace(/^[A-Za-z]:[\\/]Users[\\/][^\\/]+/i, '~');
+}
+
+// A file on this computer: "/Users/me/x.md", or "C:\Users\me\x.md" on Windows.
+export function isFilePath(path) {
+  return /^\//.test(String(path || '')) || /^[A-Za-z]:[\\/]/.test(String(path || ''));
+}
+
+// A link that opens the file in VS Code: vscode://file/Users/me/x.md, vscode://file/C:/Users/me/x.md.
+export function fileLink(path, scheme = 'vscode') {
+  const s = String(path || '');
+  return `${scheme}://file${/^[A-Za-z]:[\\/]/.test(s) ? `/${s.replace(/\\/g, '/')}` : s}`;
 }
 
 // ---------------------------------------------------------------- work, drawn in cells

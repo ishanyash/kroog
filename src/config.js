@@ -65,6 +65,7 @@ export function paths() {
     state: path.join(home, 'state.json'),
     env: path.join(home, '.env'),
     hookScript: path.join(home, 'hook.sh'),
+    hookNode: path.join(home, 'hook.mjs'),
     inboxes: path.join(home, 'inboxes.json'),
     usage: path.join(home, 'usage.jsonl'),
     backups: path.join(home, 'backups'),

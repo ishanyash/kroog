@@ -7,6 +7,7 @@
 // The format is internal to Claude Code and can change: anything unexpected is skipped,
 // and hooks still work without it.
 import fs from 'node:fs';
+import { inboxPresent } from './platform.js';
 import path from 'node:path';
 
 const STALE_MS = 6 * 3600000;
@@ -63,7 +64,7 @@ export class Presence {
       if (d.updatedAt && Date.now() - d.updatedAt > STALE_MS) continue;
       const socket = typeof d.messagingSocketPath === 'string' ? d.messagingSocketPath : '';
       let hasSocket = false;
-      try { hasSocket = Boolean(socket) && fs.statSync(socket).isSocket(); } catch { hasSocket = false; }
+      hasSocket = Boolean(socket) && inboxPresent(socket);
       const prev = this.map.get(d.sessionId);
       const entry = {
         pid: Number(d.pid),

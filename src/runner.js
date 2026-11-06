@@ -7,8 +7,8 @@
 //   resume  the next turn of a chat Kroog owns (or one that was closed in the editor)
 //   fork    a branch of a chat that may still be open in the editor. The editor keeps its
 //           copy untouched, and the branch is a new chat linked to it in the lineage.
+import { openExternal } from './platform.js';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { findClaude, claudeVersion, startTurn } from './claude-cli.js';
 import { truncate, clip, firstLine, titleFromPrompt, baseName } from './util.js';
@@ -28,8 +28,7 @@ export class Runner {
     // Opens a vscode:// link on this computer (Kroog runs here, so it can, without the browser).
     this.open = opener || ((url) => {
       if (demo) return;
-      const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
-      try { spawn(cmd, [url], { stdio: 'ignore', detached: true }).unref(); } catch { /* best effort */ }
+      openExternal(url);
     });
     // Opens folders and chats in the editor (through its command when it has one).
     this.editor = editor || new EditorOpener({ open: this.open, demo });

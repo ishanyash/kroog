@@ -236,7 +236,7 @@ function demoSummary(s) {
     gist: todo.length ? `${done.length} step${done.length === 1 ? '' : 's'} done; next: ${truncate(todo[0].text, 40)}` : truncate(s.lastReply ? s.lastReply.split('\n')[0] : s.title || 'A chat', 70),
     done: done.slice(-3).map((p) => p.text),
     next: todo.slice(0, 2).map((p) => p.text),
-    keywords: [...new Set((s.files || []).slice(-3).map((f) => f.split('/').pop()).concat(s.project ? [s.project] : []))].slice(0, 4),
+    keywords: [...new Set((s.files || []).slice(-3).map((f) => f.split(/[\\/]/).pop()).concat(s.project ? [s.project] : []))].slice(0, 4),
   };
 }
 

@@ -21,6 +21,7 @@ Never: `~/.claude/.credentials.json`, the macOS Keychain, any other `.env`, your
 - Claude Code's MCP servers: the `kroog-brain` tool at the user scope, only when you press **add to claude code** on the brain page.
 - `node bin/kroog.js unlink` removes the hooks, the mod and the brain tool.
 - The clipboard, when you ask for context to be copied, or when a new chat did not appear in time.
+- The system's temporary folder: for each AI helper call, a small folder with that call's system prompt and settings, deleted when the call ends.
 - Nothing in any project folder.
 - The demo (`node bin/kroog.js demo`) keeps its data in a temporary folder and writes nothing of the above.
 

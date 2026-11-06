@@ -9,6 +9,9 @@ import { Engine } from '../src/engine.js';
 import { Presence } from '../src/presence.js';
 import { isJunkTitle, retitle, isEmptyChat } from '../src/titles.js';
 
+// A chat's inbox address for tests: a socket file on macOS and Linux, a named pipe on Windows.
+const endpoint = (dir, name) => (process.platform === 'win32' ? `\\\\.\\pipe\\kroog-test-${process.pid}-${name}-${Math.random().toString(36).slice(2, 8)}` : path.join(dir, `${name}.sock`));
+
 function registry(entries) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-sessions-'));
   for (const e of entries) {
@@ -20,7 +23,7 @@ function registry(entries) {
 
 test('Claude Code\'s registry tells Kroog which chats are open, busy or idle, with their inbox', async () => {
   const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
-  const socket = path.join(sockDir, '1.sock');
+  const socket = endpoint(sockDir, '1');
   const server = net.createServer(() => {});
   await new Promise((r) => server.listen(socket, r));
   const dir = registry([
@@ -73,7 +76,7 @@ test('titles made from editor tags are replaced, and empty chats are spotted', (
 // in the registry, and the context goes in as its first message.
 test('a new chat in the editor gets the context through its inbox once it appears in the registry', async () => {
   const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
-  const socket = path.join(sockDir, 'new.sock');
+  const socket = endpoint(sockDir, 'new');
   const got = [];
   const server = net.createServer((c) => { let buf = ''; c.on('data', (d) => { buf += d; }); c.on('end', () => got.push(buf)); });
   await new Promise((r) => server.listen(socket, r));
@@ -142,7 +145,7 @@ test('when no new chat shows up, the context goes on the clipboard instead', asy
 
 test('without a hook receipt, Kroog says the chat has not taken the message yet', async () => {
   const sockDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-socks-'));
-  const socket = path.join(sockDir, 'held.sock');
+  const socket = endpoint(sockDir, 'held');
   const server = net.createServer((c) => c.on('data', () => {}));
   await new Promise((r) => server.listen(socket, r));
   const dir = registry([{ pid: process.pid, sessionId: 'held-1', cwd: '/Users/me/code/app', entrypoint: 'claude-vscode', status: 'idle', statusUpdatedAt: Date.now(), startedAt: Date.now(), messagingSocketPath: socket, token: 'tok' }]);

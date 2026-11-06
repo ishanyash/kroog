@@ -2,7 +2,7 @@
 // meaning and by keyword. The app calls renderBrain() on every live update, so this keeps
 // its own state and only redraws the parts that changed (your typing is never interrupted).
 import { mountBrainMap } from './brainmap.js';
-import { dayish } from './util.js';
+import { dayish, isFilePath, fileLink } from './util.js';
 
 const KIND_LABEL = {
   instructions: 'instructions',
@@ -95,7 +95,7 @@ function mapLine() {
 // ---- the list -------------------------------------------------------------------------
 
 function resultHtml(r, esc) {
-  const canOpen = r.path && r.path.startsWith('/');
+  const canOpen = r.path && isFilePath(r.path);
   return `<li class="brain-hit" data-brain-id="${esc(r.id)}" data-brain-path="${esc(r.path || '')}">
     <div class="bh-head"><b title="${esc(r.title || '')}">${esc(shortTitle(r.title) || shortPath(r.path))}</b><span class="bh-proj">${esc(r.project || '')}</span></div>
     ${r.heading && r.heading !== r.title ? `<div class="bh-path">${esc(r.heading)}</div>` : ''}
@@ -242,7 +242,7 @@ function mountMap(view) {
     onOpen: (node) => {
       if (!node) return;
       if (node.type === 'chat') openChat(node.chatId);
-      else if (node.path && node.path.startsWith('/')) API.openUrl(`vscode://file${node.path}`);
+      else if (node.path && isFilePath(node.path)) API.openUrl(fileLink(node.path));
     },
   });
   if (B.mapData) {
@@ -293,7 +293,7 @@ async function showDetail(node) {
       <div class="bd-acts"><button type="button" class="btn sm solid" data-brain-chat="${esc(node.chatId)}">open chat</button><button type="button" class="btn sm soft" data-brain-brief-node="1">use in a brief</button></div>`;
     return;
   }
-  const canOpen = node.path && node.path.startsWith('/');
+  const canOpen = node.path && isFilePath(node.path);
   panel.innerHTML = `<div class="bd-head"><div><span class="bd-kind">${esc(KIND_LABEL[node.kind] || node.kind)}, ${esc(node.project)}</span><h2 title="${esc(node.title)}">${esc(shortTitle(node.title))}</h2><span class="quiet bd-path">${esc(shortPath(node.path))}</span></div>${close}</div>
     <div class="bd-acts">${canOpen ? `<button type="button" class="btn sm soft" data-brain-open="${esc(node.path)}">open</button>` : ''}<button type="button" class="btn sm soft" data-brain-copy-node="1">copy</button><button type="button" class="btn sm soft" data-brain-brief-node="1">use in a brief</button></div>
     <pre class="bd-text" id="bd-text">${B.texts.has(node.path) ? textHtml(B.texts.get(node.path), esc) : 'loading…'}</pre>`;
@@ -357,7 +357,7 @@ function bind(view) {
     }
     const item = (id) => allItems().find((r) => r.id === id);
     if (d.brainShow !== undefined) { showOnMap(d.brainShow); return; }
-    if (d.brainOpen) { API.openUrl(`vscode://file${d.brainOpen}`); return; }
+    if (d.brainOpen) { API.openUrl(fileLink(d.brainOpen)); return; }
     if (d.brainClose !== undefined) { if (B.map) B.map.select(null); else showDetail(null); return; }
     if (d.brainChat) { openChat(d.brainChat); return; }
     if (d.brainCopyNode) {

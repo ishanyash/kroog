@@ -61,7 +61,7 @@ export function tfidfModel(meta) {
   for (const c of meta.chunks) {
     const bag = docs.get(c.path) || new Map();
     // The words of the text and its headings, not the file's own name.
-    const base = String(c.path || '').split('/').pop();
+    const base = String(c.path || '').split(/[\\/]/).pop();
     const title = c.title && c.title !== base && !String(c.title).endsWith(`/${base}`) ? c.title : '';
     const heads = String(c.heading || '').split(' › ').slice(1).join(' ');
     for (const t of tokens(`${title} ${heads} ${c.text}`)) bag.set(t, (bag.get(t) || 0) + 1);
@@ -170,7 +170,7 @@ export async function buildMap({ meta, vectors, chats = [], embedChats = null, m
   const nodes = [];
   for (const f of files) {
     const chunks = byPath.get(f.path) || [];
-    const named = f.path.startsWith(NOTE_PREFIX) ? f.title : f.path.split('/').pop();
+    const named = f.path.startsWith(NOTE_PREFIX) ? f.title : f.path.split(/[\\/]/).pop();
     nodes.push({
       id: `f:${f.path}`,
       type: 'file',

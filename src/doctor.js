@@ -1,6 +1,7 @@
 // `kroog doctor`: checks, in plain words, everything that has to be right for Kroog to see
 // your chats and send messages into them. Each check says ok or what to do.
 import fs from 'node:fs';
+import { inboxPresent } from './platform.js';
 import os from 'node:os';
 import path from 'node:path';
 import { paths, loadSettings, claudeDir } from './config.js';
@@ -56,11 +57,12 @@ export async function doctor({ version = '' } = {}) {
   else if (link.linked) ok('Linked to Claude Code', link.settingsPath);
   else bad('Not linked to Claude Code', 'Run: node bin/kroog.js link');
   if (hasOldCrewHooks()) bad('Some hooks still point at the old ~/.crew folder', 'Run: node bin/kroog.js link');
+  // The relay the hooks use: hook.sh (sh and curl), or hook.mjs (Node: Windows, or no curl).
   let script = '';
-  try { script = fs.readFileSync(p.hookScript, 'utf8'); } catch { /* missing */ }
+  try { script = fs.readFileSync(link.scriptPath || p.hookScript, 'utf8'); } catch { /* missing */ }
   if (!script) bad('The hook script is missing', 'Run: node bin/kroog.js link');
   else if (!script.includes('X-Kroog-Inbox')) bad('The hook script is from an older version, so chats can\'t tell Kroog their inbox', 'Start Kroog once (it updates the script), or run: node bin/kroog.js link');
-  else ok('The hook script passes each chat\'s inbox to Kroog');
+  else ok(`The hook script passes each chat's inbox to Kroog (${link.relay === 'node' ? 'the Node relay' : 'sh and curl'})`);
   if (link.scriptPort && Number(link.scriptPort) !== Number(settings.port)) bad(`The hooks talk to port ${link.scriptPort}, but Kroog uses ${settings.port}`, `Run: node bin/kroog.js link --port ${settings.port}`);
 
   // 2. Kroog itself.
@@ -96,7 +98,7 @@ export async function doctor({ version = '' } = {}) {
   let inboxes = {};
   try { inboxes = JSON.parse(fs.readFileSync(p.inboxes, 'utf8')); } catch { /* none */ }
   const known = Object.values(inboxes);
-  const alive = known.filter((v) => { try { return fs.statSync(v.socket).isSocket(); } catch { return false; } });
+  const alive = known.filter((v) => inboxPresent(v.socket));
   const fromRegistry = presence.available ? presence.all().filter((e) => e.socket && e.token).length : 0;
   if (alive.length || fromRegistry) ok(`Kroog can message ${Math.max(alive.length, fromRegistry)} open chat${Math.max(alive.length, fromRegistry) === 1 ? '' : 's'} right now`);
   else if (presence.available) ok('No open chat to message right now', 'Open one in VS Code and Kroog can reach it within seconds');

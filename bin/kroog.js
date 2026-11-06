@@ -5,7 +5,6 @@
 //   node bin/kroog.js start    run Kroog for your real chats
 //   node bin/kroog.js unlink   remove Kroog's hooks again
 //   node bin/kroog.js status   show what's linked and where things live
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { claudeDir, migrateFromCrew, ensureHome, paths, loadSettings, saveSettings, readToken, readApiKey, writeApiKey, removeApiKey, DEFAULT_SETTINGS } from '../src/config.js';
@@ -18,7 +17,7 @@ import { Groups } from '../src/groups.js';
 import { SecondBrain } from '../src/memory/index.js';
 import { runMcp, mcpAddArgs } from '../src/mcp.js';
 import { cleanEnv } from '../src/claude-cli.js';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
 import { Store } from '../src/store.js';
@@ -33,6 +32,7 @@ import { Usage } from '../src/usage.js';
 import { CostBook, PRICES_AS_OF } from '../src/cost.js';
 import { burnReport } from '../src/burn.js';
 import { modStatus, installMod, uninstallMod, removeBrainTool, installLine, isStableFolder } from '../src/mod.js';
+import { openExternal, execCli } from '../src/platform.js';
 import { AiHelper } from '../src/ai.js';
 
 const VERSION = '1.5.0';
@@ -44,14 +44,9 @@ const option = (name) => {
   return i !== -1 ? args[i + 1] : undefined;
 };
 
+// Opening the browser is a convenience only.
 function openBrowser(url) {
-  const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const opts = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
-  try {
-    spawn(opener, opts, { stdio: 'ignore', detached: true }).unref();
-  } catch {
-    // Opening the browser is a convenience only.
-  }
+  openExternal(url);
 }
 
 function checkNode() {
@@ -294,7 +289,7 @@ async function start({ demo }) {
       if (!runner.available()) throw new Error('Kroog could not find Claude Code on this computer. See setup.');
       const bin = runner.cli.path;
       const script = fileURLToPath(import.meta.url);
-      const run = (args) => new Promise((resolve) => execFile(bin, args, { env: cleanEnv(), timeout: 30000 }, (error, stdout, stderr) => resolve({ error, out: `${stdout}${stderr}` })));
+      const run = (args) => new Promise((resolve) => execCli(bin, args, { env: cleanEnv(), timeout: 30000 }, (error, stdout, stderr) => resolve({ error, out: `${stdout}${stderr}` })));
       await run(['mcp', 'remove', '--scope', 'user', 'kroog-brain']);
       const r = await run(mcpAddArgs(process.execPath, script));
       if (r.error) throw new Error(`Claude Code said: ${r.out.trim().slice(0, 200) || r.error.message}`);
@@ -388,7 +383,7 @@ async function start({ demo }) {
     // Is the kroog-brain tool already added to Claude Code?
     detecting.then(() => {
       if (!runner.available()) return;
-      execFile(runner.cli.path, ['mcp', 'get', 'kroog-brain'], { env: cleanEnv(), timeout: 20000 }, (error) => { brainConnected = !error; });
+      execCli(runner.cli.path, ['mcp', 'get', 'kroog-brain'], { env: cleanEnv(), timeout: 20000 }, (error) => { brainConnected = !error; });
     });
   }
 
@@ -461,7 +456,33 @@ function pidOnPort(port) {
 }
 
 // The process listening on the port, with its command line (macOS and Linux).
+// Windows: netstat for the process listening on the port (matched by its empty remote address,
+// since the word for "listening" depends on the system's language), PowerShell for its command.
+function listenerOnPortWindows(port) {
+  let out = '';
+  try {
+    out = execFileSync('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8', timeout: 8000, windowsHide: true });
+  } catch {
+    return null;
+  }
+  let pid = null;
+  for (const line of out.split(/\r?\n/)) {
+    const m = /^\s*TCP\s+\S+:(\d+)\s+(?:0\.0\.0\.0:0|\[::\]:0)\s+\S+\s+(\d+)\s*$/i.exec(line);
+    if (m && Number(m[1]) === Number(port)) { pid = Number(m[2]); break; }
+  }
+  if (!pid) return null;
+  let command = '';
+  try {
+    command = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`], { encoding: 'utf8', timeout: 10000, windowsHide: true }).trim();
+  } catch { /* the name alone below */ }
+  if (!command) {
+    try { command = (execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', timeout: 8000, windowsHide: true }).split(',')[0] || '').replace(/"/g, '').trim(); } catch { /* unknown */ }
+  }
+  return { pid, command };
+}
+
 function listenerOnPort(port) {
+  if (process.platform === 'win32') return listenerOnPortWindows(port);
   let out = '';
   try {
     out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fpc'], { encoding: 'utf8', timeout: 5000 });
@@ -478,7 +499,10 @@ function listenerOnPort(port) {
 const looksLikeOurs = (command) => /(crew|kroog)\.js|[\\/]\.?(crew|kroog)[\\/]|\bcrew\b|\bkroog\b/i.test(String(command || ''));
 
 async function endProcess(pid, label) {
-  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  // A process that has exited but not been collected by its parent yet (a "zombie" on Linux)
+  // still answers kill(pid, 0); it holds nothing and counts as stopped.
+  const zombie = () => { try { return /\)\s+Z\s/.test(fs.readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { return false; } };
+  const alive = () => { try { process.kill(pid, 0); return !zombie(); } catch { return false; } };
   try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
   let until = Date.now() + 4000;
   while (alive() && Date.now() < until) await new Promise((r) => setTimeout(r, 200));
@@ -488,7 +512,7 @@ async function endProcess(pid, label) {
     until = Date.now() + 2000;
     while (alive() && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
   }
-  console.log(alive() ? `Could not stop ${label} (process ${pid}). Try: kill -9 ${pid}` : `Stopped ${label} (process ${pid}).`);
+  console.log(alive() ? `Could not stop ${label} (process ${pid}). Try: ${process.platform === 'win32' ? `taskkill /PID ${pid} /F` : `kill -9 ${pid}`}` : `Stopped ${label} (process ${pid}).`);
 }
 
 async function stop() {
@@ -568,11 +592,6 @@ try {
     }
     case 'link': {
       checkNode();
-      if (process.platform === 'win32') {
-        console.error('Kroog links to Claude Code through a shell script, so it needs macOS or Linux. On Windows, run it inside WSL. `node bin/kroog.js demo` works anywhere.');
-        process.exitCode = 1;
-        break;
-      }
       const settings = loadSettings();
       const port = Number(option('port') || settings.port || DEFAULT_SETTINGS.port);
       if (port !== settings.port) saveSettings({ ...settings, port });

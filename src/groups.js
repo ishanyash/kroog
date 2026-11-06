@@ -37,7 +37,7 @@ export function tokens(text) {
 }
 
 export function chatText(s) {
-  const files = (s.files || []).slice(-12).map((f) => String(f).split('/').pop()).join(' ');
+  const files = (s.files || []).slice(-12).map((f) => String(f).split(/[\\/]/).pop()).join(' ');
   const ai = s.ai || {};
   return [s.title, s.title, ai.gist, (ai.keywords || []).join(' '), (ai.keywords || []).join(' '), truncate(s.lastPrompt || '', 400), truncate(s.lastReply || '', 700), files, files].filter(Boolean).join('\n');
 }
@@ -201,7 +201,7 @@ export class Groups {
   async askAi(sessions) {
     const lines = sessions.map((s, i) => {
       const ai = s.ai || {};
-      return `${i + 1}. [${s.project}] ${truncate(s.title, 90)}${ai.gist ? ` — ${ai.gist}` : ''}${(ai.keywords || []).length ? ` (${ai.keywords.join(', ')})` : ''}${(s.files || []).length ? ` files: ${s.files.slice(-4).map((f) => String(f).split('/').pop()).join(', ')}` : ''}`;
+      return `${i + 1}. [${s.project}] ${truncate(s.title, 90)}${ai.gist ? ` — ${ai.gist}` : ''}${(ai.keywords || []).length ? ` (${ai.keywords.join(', ')})` : ''}${(s.files || []).length ? ` files: ${s.files.slice(-4).map((f) => String(f).split(/[\\/]/).pop()).join(', ')}` : ''}`;
     });
     const text = await this.ai.complete({ system: SYSTEM, prompt: clip(lines.join('\n'), 24000), maxTokens: 900 });
     const arr = parseJson(text || '');

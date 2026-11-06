@@ -9,6 +9,8 @@ import { Engine } from '../src/engine.js';
 import { Runner } from '../src/runner.js';
 import { AiHelper } from '../src/ai.js';
 
+// The stand-in for `claude` is a script with a shebang line, which Windows cannot run directly.
+const NO_SHEBANG = process.platform === 'win32' ? 'Windows cannot run a script with a shebang line' : false;
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-claude.mjs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, ms = 4000) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await sleep(20); } return false; };
@@ -28,7 +30,7 @@ async function setup(extra = {}) {
   return { dir, store, engine, runner, ai, calls, settings, opened };
 }
 
-test('finds Claude Code and starts a new chat that Kroog runs', async () => {
+test('finds Claude Code and starts a new chat that Kroog runs', { skip: NO_SHEBANG }, async () => {
   const { dir, store, runner, calls } = await setup();
   assert.equal(runner.status().version, '9.9.9');
   const r = runner.run({ mode: 'new', cwd: dir, prompt: 'Write the readme' });
@@ -47,7 +49,7 @@ test('finds Claude Code and starts a new chat that Kroog runs', async () => {
   assert.equal(fs.realpathSync(c.cwd), fs.realpathSync(dir));
 });
 
-test('a message never makes Kroog run a chat: no resume, no branch', async () => {
+test('a message never makes Kroog run a chat: no resume, no branch', { skip: NO_SHEBANG }, async () => {
   const { dir, store, engine, runner, calls } = await setup();
   const r = runner.run({ mode: 'new', cwd: dir, prompt: 'first' });
   const s = store.session(r.id);
@@ -69,7 +71,7 @@ test('a message never makes Kroog run a chat: no resume, no branch', async () =>
   assert.equal(store.session('ed1').owner, undefined, 'the editor chat is left alone');
 });
 
-test('hooks from a chat Kroog runs keep its label and do not repeat the prompt', async () => {
+test('hooks from a chat Kroog runs keep its label and do not repeat the prompt', { skip: NO_SHEBANG }, async () => {
   const { dir, store, engine, runner } = await setup();
   process.env.FAKE_DELAY = '300';
   try {
@@ -86,7 +88,7 @@ test('hooks from a chat Kroog runs keep its label and do not repeat the prompt',
 });
 
 
-test('errors and stop are shown on the chat', async () => {
+test('errors and stop are shown on the chat', { skip: NO_SHEBANG }, async () => {
   const { dir, store, engine, runner } = await setup();
   const r = runner.run({ mode: 'new', cwd: dir, prompt: 'please fail' });
   const s = store.session(r.id);
@@ -107,7 +109,7 @@ test('errors and stop are shown on the chat', async () => {
   }
 });
 
-test('the AI helper summarises a chat and writes a brief through Claude Code', async () => {
+test('the AI helper summarises a chat and writes a brief through Claude Code', { skip: NO_SHEBANG }, async () => {
   const { dir, store, engine, ai } = await setup();
   await engine.handle('UserPromptSubmit', { session_id: 'b', cwd: dir, prompt: 'fix rounding' }, { entry: 'claude-vscode' });
   await engine.handle('Stop', { session_id: 'b', cwd: dir, last_assistant_message: 'Fixed the rounding in cart.js and checked the totals.' }, { entry: 'claude-vscode' });
