@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { isPipe, inboxAddressValid, inboxPresent, forgetPipes, commandLine, commandNames, fileLinkPath, sameFolder, baseName } from '../src/platform.js';
+import { isPipe, inboxAddressValid, inboxPresent, forgetPipes, listPipes, PIPE_DIRS, commandLine, commandNames, fileLinkPath, sameFolder, baseName } from '../src/platform.js';
 import { hookCommand, hookNodeScript, relayKind, withKroogHooks, withoutKroogHooks } from '../src/link.js';
 import { folderUrl } from '../src/editor.js';
 import { tildePath, fileLink, isFilePath } from '../public/util.js';
@@ -46,15 +46,22 @@ test('Windows lists a real pipe while it is open, and not once it closes', { ski
   const pipe = `\\\\.\\pipe\\${name}`;
   const server = net.createServer();
   await new Promise((r) => server.listen(pipe, r));
-  let listed;
-  try { listed = fs.readdirSync('\\\\.\\pipe\\'); } catch (e) { listed = e; }
-  assert.ok(Array.isArray(listed), `the list of pipes could not be read: ${listed && listed.message}`);
-  assert.ok(listed.some((n) => n.toLowerCase() === name), `not in the list; it starts: ${listed.slice(0, 6).join(', ')}`);
+  try {
+    // Which ways of listing pipes work with this Node, for the record.
+    const ways = PIPE_DIRS.map((dir) => {
+      try { return `${typeof dir === 'string' ? JSON.stringify(dir) : 'Buffer'}: ${fs.readdirSync(dir).some((n) => String(n).toLowerCase() === name) ? 'lists it' : 'does not list it'}`; } catch (e) { return `${typeof dir === 'string' ? JSON.stringify(dir) : 'Buffer'}: ${e.code}`; }
+    }).join('; ');
+    forgetPipes();
+    const listed = listPipes();
+    assert.ok(listed, `no way to list pipes on Node ${process.version}: ${ways}`);
+    assert.ok(listed.some((n) => n.toLowerCase() === name), `not in the list on Node ${process.version}: ${ways}`);
+    forgetPipes();
+    assert.equal(inboxPresent(pipe), true);
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
   forgetPipes();
-  assert.equal(inboxPresent(pipe), true);
-  await new Promise((r) => server.close(r));
-  forgetPipes();
-  assert.equal(fs.readdirSync('\\\\.\\pipe\\').some((n) => n.toLowerCase() === name), false, 'still listed after it closed');
+  assert.equal(listPipes().some((n) => n.toLowerCase() === name), false, 'still listed after it closed');
   assert.equal(inboxPresent(pipe), false);
 });
 

@@ -37,12 +37,26 @@ export function inboxAddressValid(p, { platform = process.platform } = {}) {
 // Is the inbox still there? A socket file can be looked at. A pipe cannot (opening it would
 // connect to the chat), but Windows lists every open pipe under \\.\pipe\, so Kroog looks for
 // its name there. The list is kept for a moment, since a sync looks at every chat at once.
+// Node 22 lists "\\.\pipe\" given as text; Node 20 drops the last backslash from text and
+// fails, but keeps it in a Buffer. The first way that works is remembered.
+export const PIPE_DIRS = ['\\\\.\\pipe\\', Buffer.from('\\\\.\\pipe\\'), '\\\\?\\pipe\\'];
+let pipeDir = null;
+export function listPipes(readdir = fs.readdirSync) {
+  for (const dir of pipeDir ? [pipeDir] : PIPE_DIRS) {
+    try {
+      const names = readdir(dir).map((n) => String(n));
+      pipeDir = dir;
+      return names;
+    } catch { /* try the next way */ }
+  }
+  return null;
+}
+
 let pipeList = { at: 0, names: null };
 function openPipes(readdir, fresh = false) {
   if (fresh || Date.now() - pipeList.at > 250) {
-    let names = null;
-    try { names = new Set(readdir('\\\\.\\pipe\\').map((n) => n.toLowerCase())); } catch { /* not listable: say maybe */ }
-    pipeList = { at: Date.now(), names };
+    const listed = listPipes(readdir);
+    pipeList = { at: Date.now(), names: listed ? new Set(listed.map((n) => n.toLowerCase())) : null };
   }
   return pipeList.names;
 }
@@ -64,6 +78,7 @@ export function inboxPresent(p, { platform = process.platform, readdir = fs.read
 // Forget the cached pipe list (tests, or right after a chat closes).
 export function forgetPipes() {
   pipeList = { at: 0, names: null };
+  pipeDir = null;
 }
 
 // ---------------------------------------------------------------- starting programs
